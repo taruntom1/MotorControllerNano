@@ -48,11 +48,11 @@ void manageCountA(); // ISR for Encoder A
 void manageCountB(); // ISR for Encoder B
 float calculateRPMA(); // Function to calculate RPM for Motor A
 float calculateRPMB(); // Function to calculate RPM for Motor B
-float calculateAngleA(); // Function to calculate angle of rotation for Motor A
-float calculateAngleB(); // Function to calculate angle of rotation for Motor B
+float calculateAngleA(); // Function to calculate the angle of rotation for Motor A
+float calculateAngleB(); // Function to calculate the angle of rotation for Motor B
 void controlMotorA(int speed); // Function to control Motor A speed and direction
 void controlMotorB(int speed); // Function to control Motor B speed and direction
-void controlMotor(int speed, int IN1, int PWM); // General function to control any motor based on speed
+void controlMotor(int speed, int IN1, int PWM); // General function to control any motor based on speed (negative for reverse, positive for forward)
 
 
 // Setup function to initialize motors, encoders, and serial communication
@@ -106,13 +106,15 @@ void loop() {
     Serial.print(" | Output: ");
     Serial.print(output);
     Serial.print(" | Target: ");
-    Serial.println(target);
+    Serial.print(target);
+    Serial.print("  countA:");
+    Serial.println(countA);
   }
 
   // Check for incoming serial data to update PID gains and target
   if (Serial.available()) {
     String received = Serial.readStringUntil('\n');
-    received.trim(); // Remove any leading or trailing whitespace
+    received.trim(); // Remove any leading or trailing whitespaces
 
     // Debugging: Print the received string to check input
     Serial.print("Received input: ");
@@ -226,13 +228,13 @@ float calculateRPMB() {
 // Function to calculate the angle of rotation for Motor A
 float calculateAngleA() {
   // Calculate angle in degrees (360 degrees per full rotation)
-  return (countA / (long)countsPerRotation) * (360.0 / countsPerRotation);
+  return (countA)*360 / 375;
 }
 
 // Function to calculate the angle of rotation for Motor B
 float calculateAngleB() {
   // Calculate angle in degrees (360 degrees per full rotation)
-  return (countB / (long)countsPerRotation) * (360.0 / countsPerRotation);
+  return ((countB)*360 / 375);
 }
 
 // Function to control Motor A speed and direction
