@@ -2,7 +2,21 @@
 #include <PID_v1.h>
 
 //#define DEBUG
-//////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////Serial Control Commands////////////////////////////////////////////
+// Define command characters for various actions
+#define MOTOR_ANGLES   'a' // Set motor angles (degrees) eg: a 100 200
+#define READ_ENCODERS  'e' // Read encoder counts (counts) eg: e
+#define READ_SPEEDS   's' // Read motor speeds (RPM) eg: s
+#define MOTOR_SPEEDS   'm' // Set motor speeds (RPM) eg: m 100 200
+#define MOTOR_PWM      'n' // Set motor PWM (0-255) eg: f 100 200
+#define PING           'p' // Ping the Arduino
+#define RESET_ENCODERS 'r' // Reset encoder counts (counts) eg: r
+#define UPDATE_PIDAA    'u' // Update angle PID values for Motor A (Kp, Ki, Kd) eg: u 10:20:30
+#define UPDATE_PIDAB    'v' // Update angle PID values for Motor B (Kp, Ki, Kd) eg: v 10:20:30
+#define UPDATE_PIDSA    'w' // Update speed PID values for Motor A (Kp, Ki, Kd) eg: w 10:20:30
+#define UPDATE_PIDSB    'x' // Update speed PID values for Motor B (Kp, Ki, Kd) eg: x 10:20:30
+
 //////////////////////////////////////////////////////////////////////////////////////
 
 // Pin definitions for Encoders
@@ -77,20 +91,8 @@ PID motorSpeedPIDB(&speed2, &output2, &targetSpeed1, KpB2, KiB2, KdB1, DIRECT);
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 
-//////////////////////////////////////////////////////////////////////////////////////
-///////////////////////////Control via Serial/////////////////////////////////////
-// Define command characters for various actions
-#define MOTOR_ANGLES   'a' // Set motor angles (degrees) eg: a 100 200
-#define READ_ENCODERS  'e' // Read encoder counts (counts) eg: e
-#define READ_SPEEDS   's' // Read motor speeds (RPM) eg: f
-#define MOTOR_SPEEDS   'm' // Set motor speeds (RPM) eg: m 100 200
-#define PING           'p' // Ping the Arduino
-#define RESET_ENCODERS 'r' // Reset encoder counts (counts) eg: r
-#define UPDATE_PIDAA    'u' // Update angle PID values for Motor A (Kp, Ki, Kd) eg: u 10:20:30
-#define UPDATE_PIDAB    'v' // Update angle PID values for Motor B (Kp, Ki, Kd) eg: v 10:20:30
-#define UPDATE_PIDSA    'w' // Update speed PID values for Motor A (Kp, Ki, Kd) eg: w 10:20:30
-#define UPDATE_PIDSB    'x' // Update speed PID values for Motor B (Kp, Ki, Kd) eg: x 10:20:30
-
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////Serial Controls//////////////////////////////////////////////////////
 
 // Variables to handle serial command parsing
 int arg = 0;
@@ -206,6 +208,10 @@ int runCommand() {
 
       break;
 
+    case MOTOR_PWM:
+      controlMotorA(arg1);    // Set PWM of motor 1 to argument 1
+      controlMotorB(arg2);    // Set PWM of motor 2 to argument 2
+      break;
     case UPDATE_PIDAA:
       // Parse PID values for Motor A
       while ((str = strtok_r(p, ":", &p)) != NULL) {
@@ -290,6 +296,7 @@ int runCommand() {
       break;
   }
 }
+
 ////////////////////////////////////////////////////
 
 
