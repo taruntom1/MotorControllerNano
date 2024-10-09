@@ -102,6 +102,17 @@ char argv2[16];      // Holds the second argument as a string
 long arg1;           // First argument converted to integer
 long arg2;           // Second argument converted to integer
 
+// Function declarations
+void manageCountA(); // ISR for Encoder A
+void manageCountB(); // ISR for Encoder B
+int calculateRPMA(); // Function to calculate RPM for Motor A
+int calculateRPMB(); // Function to calculate RPM for Motor B
+double calculateAngleA(); // Function to calculate the angle of rotation for Motor A
+double calculateAngleB(); // Function to calculate the angle of rotation for Motor B
+void controlMotorA(double speed); // Function to control Motor A speed and direction
+void controlMotorB(double speed); // Function to control Motor B speed and direction
+void controlMotor(double speed, int IN1, int PWM); // General function to control any motor based on speed (negative for reverse, positive for forward)
+
 // Function to clear command parameters
 void resetCommand() {
   cmd = NULL;
@@ -117,16 +128,7 @@ void resetCommand() {
 unsigned long lastUpdateTime = 0;
 const int interval = 33; // Time interval in milliseconds (1000ms/30 = ~33ms)
 
-// Function declarations
-void manageCountA(); // ISR for Encoder A
-void manageCountB(); // ISR for Encoder B
-int calculateRPMA(); // Function to calculate RPM for Motor A
-int calculateRPMB(); // Function to calculate RPM for Motor B
-double calculateAngleA(); // Function to calculate the angle of rotation for Motor A
-double calculateAngleB(); // Function to calculate the angle of rotation for Motor B
-void controlMotorA(double speed); // Function to control Motor A speed and direction
-void controlMotorB(double speed); // Function to control Motor B speed and direction
-void controlMotor(double speed, int IN1, int PWM); // General function to control any motor based on speed (negative for reverse, positive for forward)
+
 
 
 // Function to run the appropriate command based on serial input
