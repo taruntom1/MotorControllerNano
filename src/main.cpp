@@ -122,7 +122,7 @@ void controlMotor(double speed, int IN1, int PWM); // General function to contro
 
 // Function to clear command parameters
 void resetCommand() {
-  cmd = NULL;
+  cmd = '\0';
   memset(argv1, 0, sizeof(argv1));
   memset(argv2, 0, sizeof(argv2));
   arg1 = 0;
