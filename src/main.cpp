@@ -1,10 +1,88 @@
 #include <Arduino.h>
 #include <PID_v1.h>
+
+//#define DEBUG
+//////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+
+// Pin definitions for Encoders
+#define encoderPinA1 2  // Encoder A Channel 1
+#define encoderPinA2 4  // Encoder A Channel 2
+#define encoderPinB1 3  // Encoder B Channel 1
+#define encoderPinB2 5  // Encoder B Channel 2
+
+// Pin definitions for Motor A
+const int motorA_IN1 = 7;  // Motor A IN1 pin
+const int motorA_PWM = 6;  // Motor A PWM pin (Enable pin)
+
+// Pin definitions for Motor B
+const int motorB_IN1 = 10;  // Motor B IN1 pin
+const int motorB_PWM = 9;  // Motor B PWM pin (Enable pin)
+
+// Variables to hold encoder counts
+volatile long countA = 0;  // Encoder count for Motor A
+volatile long countB = 0;  // Encoder count for Motor B
+
+// Constants for encoder and motor calculations
+const float countsPerRotation = 375.0;  // 500 encoder counts per motor rotation
+
+// Previous values for RPM calculation
+unsigned long prevTimeA = 0;  // Previous timestamp for Motor A
+long prevCountA = 0;          // Previous encoder count for Motor A
+unsigned long prevTimeB = 0;  // Previous timestamp for Motor B
+long prevCountB = 0;          // Previous encoder count for Motor B
+
+
+
+
+// PID Controller Mode
+bool mode; // Mode for PID controller mode 0 for angle PID and 1 for speed PID
+
+double output1 = 0; // Output for Motor A
+double output2 = 0; // Output for Motor B
+/////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////Angle PID//////////////////////////////////////////////////////
+
+double angle1 = 0; // Angle of rotation for Motor A
+double targetAngle1 = 0; // Target angle for Motor A
+
+double angle2 = 0; // Angle of rotation for Motor B
+double targetAngle2 = 0; // Target angle for Motor B
+
+// PID constants for motor 1
+double KpA1 = 0.7, KiA1 = 0.1, KdA1 = 0.1;
+// PID constants for motor 2
+double KpA2 = 0.7, KiA2 = 0.1, KdA2 = 0.1;
+
+// PID Controller Object
+PID motorAnglePIDA(&angle1, &output1, &targetAngle1, KpA1, KiA1, KdA1, DIRECT);
+PID motorAnglePIDB(&angle2, &output2, &targetAngle1, KpA2, KiA2, KdA1, DIRECT);
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////Speed PID//////////////////////////////////////////////////////
+
+double speed1 = 0; // Speed of Motor A
+double targetSpeed1 = 0; // Target speed for Motor A
+
+double speed2 = 0; // Speed of Motor B
+double targetSpeed2 = 0; // Target speed for Motor B
+
+// PID constants for motor 1
+double KpB1 = 1.0, KiB1 = 0.5, KdB1 = 0.1;
+// PID constants for motor 2
+double KpB2 = 1.0, KiB2 = 0.5, KdB2 = 0.1;
+
+PID motorSpeedPIDA(&speed1, &output1, &targetSpeed1, KpB1, KiB1, KdB1, DIRECT);
+PID motorSpeedPIDB(&speed2, &output2, &targetSpeed1, KpB2, KiB2, KdB1, DIRECT);
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+
 //////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////Control via Serial/////////////////////////////////////
 // Define command characters for various actions
 #define MOTOR_ANGLES   'a' // Set motor angles (degrees) eg: a 100 200
 #define READ_ENCODERS  'e' // Read encoder counts (counts) eg: e
+#define READ_SPEEDS   's' // Read motor speeds (RPM) eg: f
 #define MOTOR_SPEEDS   'm' // Set motor speeds (RPM) eg: m 100 200
 #define PING           'p' // Ping the Arduino
 #define RESET_ENCODERS 'r' // Reset encoder counts (counts) eg: r
@@ -35,6 +113,21 @@ void resetCommand() {
   index = 0;
 }
 
+// Timing variables for running PID at a set interval (30 times per second)
+unsigned long lastUpdateTime = 0;
+const int interval = 33; // Time interval in milliseconds (1000ms/30 = ~33ms)
+
+// Function declarations
+void manageCountA(); // ISR for Encoder A
+void manageCountB(); // ISR for Encoder B
+int calculateRPMA(); // Function to calculate RPM for Motor A
+int calculateRPMB(); // Function to calculate RPM for Motor B
+double calculateAngleA(); // Function to calculate the angle of rotation for Motor A
+double calculateAngleB(); // Function to calculate the angle of rotation for Motor B
+void controlMotorA(double speed); // Function to control Motor A speed and direction
+void controlMotorB(double speed); // Function to control Motor B speed and direction
+void controlMotor(double speed, int IN1, int PWM); // General function to control any motor based on speed (negative for reverse, positive for forward)
+
 
 // Function to run the appropriate command based on serial input
 int runCommand() {
@@ -51,38 +144,84 @@ int runCommand() {
       break;
     
     case READ_ENCODERS:
-      Serial.println("Encoder count OK");
+      Serial.print(countA);    // Respond with encoder count A
+      Serial.print(" ");
+      Serial.println(countB);  // Respond with encoder count B
       break;
     
+    case READ_SPEEDS:
+      Serial.print(calculateRPMA());    // Respond with RPM of motor A
+      Serial.print(" ");
+      Serial.println(calculateRPMB());  // Respond with RPM of motor B
+      break;
     case RESET_ENCODERS:
-      Serial.println("Encoders reset");
+      countA = 0;     // Reset encoder count A to zero
+      countB = 0;     // Reset encoder count B to zero
+      Serial.println("Encoders reseted");
       break;
     
     case MOTOR_SPEEDS:
-      if (arg1 == 0 && arg2 == 0) {
-        Serial.println("Motors stopped");
-      } else {
-        Serial.print("Speed 1: ");
-        Serial.println(arg1);
-        Serial.print("Speed 2: ");
-        Serial.println(arg2);
-      }
+      
+      motorAnglePIDA.SetMode(MANUAL);  // Set PID mode of angle PID A to manual
+      motorAnglePIDB.SetMode(MANUAL);  // Set PID mode of angle PID B to manual
+      motorSpeedPIDA.SetMode(AUTOMATIC);  // Set PID mode of speed PID A to automatic
+      motorSpeedPIDB.SetMode(AUTOMATIC);  // Set PID mode of speed PID B to automatic
+
+      mode = 1;   // Set mode flag to 1 (manual)
+      
+      targetSpeed1 = arg1;    // Set target speed of motor 1 to argument 1
+      targetSpeed2 = arg2;    // Set target speed of motor 2 to argument 2
+
+      #ifdef DEBUG
+      Serial.print("Speed 1: ");
+      Serial.println(arg1);
+      Serial.print("Speed 2: ");
+      Serial.println(arg2);
+      #endif
+
       break;
     
+    case MOTOR_ANGLES:
+
+      motorSpeedPIDA.SetMode(MANUAL);  // Set PID mode of speed PID A to manual
+      motorSpeedPIDB.SetMode(MANUAL);  // Set PID mode of speed PID B to manual
+      motorAnglePIDA.SetMode(AUTOMATIC);  // Set PID mode of angle PID A to automatic
+      motorAnglePIDB.SetMode(AUTOMATIC);  // Set PID mode of angle PID B to automatic
+
+      
+
+      mode = 0;   // Set mode flag to 0 (manual)
+
+      targetAngle1 = calculateAngleA() + arg1;    // Set target angle of motor 1 to argument 1 + current angle
+      targetAngle2 = calculateAngleB() + arg2;    // Set target angle of motor 2 to argument 2 + current angle
+
+      #ifdef DEBUG
+      Serial.print("Speed 1: ");
+      Serial.println(arg1);
+      Serial.print("Speed 2: ");
+      Serial.println(arg2);
+      #endif
+
+      break;
+
     case UPDATE_PIDAA:
       // Parse PID values for Motor A
       while ((str = strtok_r(p, ":", &p)) != NULL) {
         pid_args[i] = atoi(str);
         i++;
       }
-      Kp1 = pid_args[0];
-      Kd1 = pid_args[1];
-      Ki1 = pid_args[2];
+      KpA1 = pid_args[0];
+      KiA1 = pid_args[1];
+      KdA1 = pid_args[2];
+      // Set PID values for motor A
+      motorAnglePIDA.SetTunings(KpA1, KiA1, KdA1);
 
+      #ifdef DEBUG
       Serial.println("PID A updated");
-      Serial.print("Kp1: "); Serial.println(Kp1);
-      Serial.print("Kd1: "); Serial.println(Kd1);
-      Serial.print("Ki1: "); Serial.println(Ki1);
+      Serial.print("Kp1: "); Serial.println(KpA1);
+      Serial.print("Ki1: "); Serial.println(KiA1);
+      Serial.print("Kd1: "); Serial.println(KdA1);
+      #endif
       break;
     
     case UPDATE_PIDAB:
@@ -91,14 +230,17 @@ int runCommand() {
         pid_args[i] = atoi(str);
         i++;
       }
-      Kp2 = pid_args[0];
-      Kd2 = pid_args[1];
-      Ki2 = pid_args[2];
-
+      KpA2 = pid_args[0];
+      KiA2 = pid_args[1];
+      KdA2 = pid_args[2];
+      // Set PID values for motor A
+      motorSpeedPIDB.SetTunings(KpA2, KiA2, KdA2);
+      #ifdef DEBUG
       Serial.println("PID B updated");
-      Serial.print("Kp2: "); Serial.println(Kp2);
-      Serial.print("Kd2: "); Serial.println(Kd2);
-      Serial.print("Ki2: "); Serial.println(Ki2);
+      Serial.print("Kp2: "); Serial.println(KpA2);
+      Serial.print("Ki2: "); Serial.println(KiA2);
+      Serial.print("Kd2: "); Serial.println(KdA2);
+      #endif
       break;
 
     case UPDATE_PIDSA:
@@ -107,130 +249,48 @@ int runCommand() {
         pid_args[i] = atoi(str);
         i++;
       }
-      Kp1 = pid_args[0];
-      Kd1 = pid_args[1];
-      Ki1 = pid_args[2];
-
+      KpB1 = pid_args[0];
+      KiB1 = pid_args[1];
+      KdB1 = pid_args[2];
+      // Set PID values for motor B
+      motorSpeedPIDA.SetTunings(KpB1, KiB1, KdB1);
+      #ifdef DEBUG
       Serial.println("PID A updated");
-      Serial.print("Kp1: "); Serial.println(Kp1);
-      Serial.print("Kd1: "); Serial.println(Kd1);
-      Serial.print("Ki1: "); Serial.println(Ki1);
+      Serial.print("Kp1: "); Serial.println(KpB1);
+      Serial.print("Ki1: "); Serial.println(KiB1);
+      Serial.print("Kd1: "); Serial.println(KdB1);
+      #endif
       break;
+
     case UPDATE_PIDSB:
       // Parse PID values for Motor A
       while ((str = strtok_r(p, ":", &p)) != NULL) {
         pid_args[i] = atoi(str);
         i++;
       }
-      Kp1 = pid_args[0];
-      Kd1 = pid_args[1];
-      Ki1 = pid_args[2];
+      KpB2 = pid_args[0];
+      KiB2 = pid_args[1];
+      KdB2 = pid_args[2];
+      // Set PID values for motor B
+      motorSpeedPIDB.SetTunings(KpB2, KiB2, KdB2);
 
+      #ifdef DEBUG
       Serial.println("PID A updated");
-      Serial.print("Kp1: "); Serial.println(Kp1);
-      Serial.print("Kd1: "); Serial.println(Kd1);
-      Serial.print("Ki1: "); Serial.println(Ki1);
-      break;
-    case MOTOR_ANGLES:
-      Serial.println("Motor angles set");
+      Serial.print("Kp1: "); Serial.println(KpB2);
+      Serial.print("Ki1: "); Serial.println(KiB2);
+      Serial.print("Kd1: "); Serial.println(KdB2);
+      #endif
       break;
 
+    
     default:
       Serial.println("Invalid command");
       break;
   }
 }
-
-//////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////
-
-// Pin definitions for Encoders
-#define encoderPinA1 2  // Encoder A Channel 1
-#define encoderPinA2 4  // Encoder A Channel 2
-#define encoderPinB1 3  // Encoder B Channel 1
-#define encoderPinB2 5  // Encoder B Channel 2
-
-// Pin definitions for Motor A
-const int motorA_IN1 = 8;  // Motor A IN1 pin
-const int motorA_PWM = 6;  // Motor A PWM pin (Enable pin)
-
-// Pin definitions for Motor B
-const int motorB_IN1 = 9;  // Motor B IN1 pin
-const int motorB_PWM = 11;  // Motor B PWM pin (Enable pin)
-
-// Variables to hold encoder counts
-volatile long countA = 0;  // Encoder count for Motor A
-volatile long countB = 0;  // Encoder count for Motor B
-
-// Constants for encoder and motor calculations
-const float countsPerRotation = 375.0;  // 500 encoder counts per motor rotation
-
-// Previous values for RPM calculation
-unsigned long prevTimeA = 0;  // Previous timestamp for Motor A
-long prevCountA = 0;          // Previous encoder count for Motor A
-unsigned long prevTimeB = 0;  // Previous timestamp for Motor B
-long prevCountB = 0;          // Previous encoder count for Motor B
+////////////////////////////////////////////////////
 
 
-// PID Controller Mode
-bool mode; // Mode for PID controller mode 0 for angle PID and 1 for speed PID
-
-double output1 = 0; // Output for Motor A
-double output2 = 0; // Output for Motor B
-/////////////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////Angle PID//////////////////////////////////////////////////////
-
-double angle1 = 0; // Angle of rotation for Motor A
-double targetAngle1 = 0; // Target angle for Motor A
-
-double angle2 = 0; // Angle of rotation for Motor B
-double targetAngle2 = 0; // Target angle for Motor B
-
-// PID constants for motor 1
-double KpA1 = 1.0, KiA1 = 0.5, KdA1 = 0.1;
-// PID constants for motor 2
-double KpA2 = 1.0, KiA2 = 0.5, KdA2 = 0.1;
-
-// PID Controller Object
-PID motorAnglePIDA(&angle1, &output1, &targetAngle1, KpA1, KiA1, KdA1, DIRECT);
-PID motorAnglePIDB(&angle2, &output2, &targetAngle1, KpA2, KiA2, KdA1, DIRECT);
-/////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////Speed PID//////////////////////////////////////////////////////
-
-double speed1 = 0; // Speed of Motor A
-double targetSpeed1 = 0; // Target speed for Motor A
-
-double speed2 = 0; // Speed of Motor B
-double targetSpeed2 = 0; // Target speed for Motor B
-
-// PID constants for motor 1
-double KpB1 = 1.0, KiB1 = 0.5, KdB1 = 0.1;
-// PID constants for motor 2
-double KpB2 = 1.0, KiB2 = 0.5, KdB2 = 0.1;
-
-PID motorSpeedPIDA(&speed1, &output1, &targetSpeed1, KpB1, KiB1, KdB1, DIRECT);
-PID motorSpeedPIDB(&speed2, &output2, &targetSpeed1, KpB2, KiB2, KdB1, DIRECT);
-/////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-
-
-// Timing variables for running PID at a set interval (30 times per second)
-unsigned long lastUpdateTime = 0;
-const int interval = 33; // Time interval in milliseconds (1000ms/30 = ~33ms)
-
-// Function declarations
-void manageCountA(); // ISR for Encoder A
-void manageCountB(); // ISR for Encoder B
-int calculateRPMA(); // Function to calculate RPM for Motor A
-int calculateRPMB(); // Function to calculate RPM for Motor B
-double calculateAngleA(); // Function to calculate the angle of rotation for Motor A
-double calculateAngleB(); // Function to calculate the angle of rotation for Motor B
-void controlMotorA(double speed); // Function to control Motor A speed and direction
-void controlMotorB(double speed); // Function to control Motor B speed and direction
-void controlMotor(double speed, int IN1, int PWM); // General function to control any motor based on speed (negative for reverse, positive for forward)
 
 
 // Setup function to initialize motors, encoders, and serial communication
@@ -264,6 +324,8 @@ void setup() {
 
   motorAnglePIDA.SetMode(AUTOMATIC);  // Set PID mode to automatic
   motorAnglePIDB.SetMode(AUTOMATIC);  // Set PID mode to automatic
+  motorSpeedPIDA.SetMode(MANUAL);  // Set PID mode to manual
+  motorSpeedPIDB.SetMode(MANUAL);  // Set PID mode to manual
 
 }
 
@@ -274,10 +336,10 @@ void loop() {
     lastUpdateTime = currentTime;
 
     if (mode == 0) {
-      // Calculate RPM for Motor A
+      // Calculate Angle for Motor A
       angle1 = calculateAngleA();
       motorAnglePIDA.Compute();
-      // Calculate RPM for Motor B
+      // Calculate Angle for Motor B
       angle2 = calculateAngleB();
       motorAnglePIDB.Compute();
       // Control Motor A and B
@@ -336,9 +398,9 @@ void loop() {
 void manageCountA() {
   // Check the state of encoderPinA2 to determine direction
   if (digitalRead(encoderPinA2) == 0) {
-    countA++;  // Forward rotation
+    countA--;  // Forward rotation
   } else {
-    countA--;  // Reverse rotation
+    countA++;  // Reverse rotation
   }
 }
 
@@ -346,9 +408,9 @@ void manageCountA() {
 void manageCountB() {
   // Check the state of encoderPinB2 to determine direction
   if (digitalRead(encoderPinB2) == 0) {
-    countB++;  // Forward rotation
+    countB--;  // Forward rotation
   } else {
-    countB--;  // Reverse rotation
+    countB++;  // Reverse rotation
   }
 }
 
@@ -392,7 +454,7 @@ int calculateRPMB() {
   prevTimeB = currentTime;
   prevCountB = currentCountB;
 
-  return static_cast<int>(rpmA);
+  return static_cast<int>(rpmB);
 }
 
 // Function to calculate the angle of rotation for Motor A
