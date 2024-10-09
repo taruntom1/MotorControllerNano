@@ -5,6 +5,7 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////Serial Control Commands////////////////////////////////////////////
 // Define command characters for various actions
+#define SET_MOTOR_PWM_OFSET 'o' // Set motor PWM offset (0-255) eg: o 100 100
 #define MOTOR_ANGLES   'a' // Set motor angles (degrees) eg: a 100 200
 #define READ_ENCODERS  'e' // Read encoder counts (counts) eg: e
 #define READ_SPEEDS   's' // Read motor speeds (RPM) eg: s
@@ -32,6 +33,10 @@ const int motorA_PWM = 6;  // Motor A PWM pin (Enable pin)
 // Pin definitions for Motor B
 const int motorB_IN1 = 10;  // Motor B IN1 pin
 const int motorB_PWM = 9;  // Motor B PWM pin (Enable pin)
+
+// PWM starting points for Motors
+uint8_t pwmOffsetA = 0; // PWM value for Motor A
+uint8_t pwmOffsetB = 0; // PWM value for Motor B
 
 // Variables to hold encoder counts
 volatile long countA = 0;  // Encoder count for Motor A
@@ -134,7 +139,7 @@ const int interval = 33; // Time interval in milliseconds (1000ms/30 = ~33ms)
 
 
 // Function to run the appropriate command based on serial input
-int runCommand() {
+void runCommand() {
   int i = 0;
   char *p = argv1;
   char *str;
@@ -153,6 +158,20 @@ int runCommand() {
       Serial.println(countB);  // Respond with encoder count B
       break;
     
+    case SET_MOTOR_PWM_OFSET:
+      pwmOffsetA = arg1;  // Set PWM offset for Motor A
+      pwmOffsetB = arg2;  // Set PWM offset for Motor B
+      motorAnglePIDA.SetOutputLimits(-255 + pwmOffsetA, 255 - pwmOffsetA);  // Set output range for Motor A
+      motorAnglePIDB.SetOutputLimits(-255 + pwmOffsetB, 255 - pwmOffsetB);  // Set output range for Motor B
+      motorSpeedPIDA.SetOutputLimits(-255 + pwmOffsetA, 255 - pwmOffsetA);  // Set output range for Motor A
+      motorSpeedPIDB.SetOutputLimits(-255 + pwmOffsetB, 255 - pwmOffsetB);  // Set output range for Motor B
+      #ifdef DEBUG
+      Serial.print("PWM Offset A: ");
+      Serial.println(pwmOffsetA);
+      Serial.print("PWM Offset B: ");
+      Serial.println(pwmOffsetB);
+      #endif
+      break;
     case READ_SPEEDS:
       Serial.print(calculateRPMA());    // Respond with RPM of motor A
       Serial.print(" ");
@@ -320,16 +339,16 @@ void setup() {
   pinMode(motorB_PWM, OUTPUT);
 
 
-    // Initial settings for AutoPID
+  // Initial settings for PID
   motorAnglePIDA.SetSampleTime(interval);  // Set PID update interval
-  motorAnglePIDA.SetOutputLimits(-240, 240);  // Set output range
+  motorAnglePIDA.SetOutputLimits(-255 + pwmOffsetA, 255 - pwmOffsetA);   // Set output range
   motorAnglePIDB.SetSampleTime(interval);  // Set PID update interval
-  motorAnglePIDB.SetOutputLimits(-240, 240);  // Set output range
+  motorAnglePIDB.SetOutputLimits(-255 + pwmOffsetB, 255 - pwmOffsetB);  // Set output range
 
   motorSpeedPIDA.SetSampleTime(interval);  // Set PID update interval
-  motorSpeedPIDA.SetOutputLimits(-240, 240);  // Set output range
+  motorSpeedPIDA.SetOutputLimits(-255 + pwmOffsetA, 255 - pwmOffsetA);  // Set output range
   motorSpeedPIDB.SetSampleTime(interval);  // Set PID update interval
-  motorSpeedPIDB.SetOutputLimits(-240, 240);  // Set output range
+  motorSpeedPIDB.SetOutputLimits(-255 + pwmOffsetB, 255 - pwmOffsetB);  // Set output range
 
   motorAnglePIDA.SetMode(AUTOMATIC);  // Set PID mode to automatic
   motorAnglePIDB.SetMode(AUTOMATIC);  // Set PID mode to automatic
@@ -480,27 +499,35 @@ double calculateAngleB() {
 
 // Function to control Motor A speed and direction
 void controlMotorA(double speed) {
-  controlMotor(speed, motorA_IN1, motorA_PWM);
+  if (speed > 0) {
+    // Forward direction
+    digitalWrite(motorA_IN1, HIGH);
+    analogWrite(motorA_PWM, speed + pwmOffsetA);  // Set speed (0-255)
+  } else if (speed < 0) {
+    // Reverse direction
+    digitalWrite(motorA_IN1, LOW);
+    analogWrite(motorA_PWM, -speed + pwmOffsetA);  // Set speed (0-255), negate for reverse
+  } else {
+    // Stop the motor
+    digitalWrite(motorA_IN1, LOW);
+    analogWrite(motorA_PWM, 0);
+  }
 }
 
 // Function to control Motor B speed and direction
 void controlMotorB(double speed) {
-  controlMotor(speed, motorB_IN1, motorB_PWM);
-}
-
-// General function to control any motor based on speed (negative for reverse, positive for forward)
-void controlMotor(double speed, int IN1, int PWM) {
   if (speed > 0) {
     // Forward direction
-    digitalWrite(IN1, HIGH);
-    analogWrite(PWM, speed);  // Set speed (0-255)
+    digitalWrite(motorB_IN1, HIGH);
+    analogWrite(motorB_PWM, speed + pwmOffsetB);  // Set speed (0-255)
   } else if (speed < 0) {
     // Reverse direction
-    digitalWrite(IN1, LOW);
-    analogWrite(PWM, -speed);  // Set speed (0-255), negate the value for reverse
+    digitalWrite(motorB_IN1, LOW);
+    analogWrite(motorB_PWM, -speed + pwmOffsetB);  // Set speed (0-255), negate for reverse
   } else {
     // Stop the motor
-    digitalWrite(IN1, LOW);
-    analogWrite(PWM, 0);
+    digitalWrite(motorB_IN1, LOW);
+    analogWrite(motorB_PWM, 0);
   }
 }
+
