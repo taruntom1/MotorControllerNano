@@ -2,6 +2,8 @@
 #include <PID_v1.h>
 
 //#define DEBUG
+#define ARDUINO_NANO
+//#define nodeMCU
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////Serial Control Commands////////////////////////////////////////////
 // Define command characters for various actions
@@ -19,7 +21,7 @@
 #define UPDATE_PIDSB    'x' // Update speed PID values for Motor B (Kp, Ki, Kd) eg: x 10:20:30
 
 //////////////////////////////////////////////////////////////////////////////////////
-
+#ifdef ARDUINO_NANO
 // Pin definitions for Encoders
 #define encoderPinA1 2  // Encoder A Channel 1
 #define encoderPinA2 4  // Encoder A Channel 2
@@ -33,6 +35,23 @@ const int motorA_PWM = 6;  // Motor A PWM pin (Enable pin)
 // Pin definitions for Motor B
 const int motorB_IN1 = 8;  // Motor B IN1 pin
 const int motorB_PWM = 9;  // Motor B PWM pin (Enable pin)
+#endif
+
+#ifdef nodeMCU
+// Pin definitions for Encoders
+#define encoderPinA1 5  // Encoder A Channel 1
+#define encoderPinA2 4  // Encoder A Channel 2
+#define encoderPinB1 14  // Encoder B Channel 1
+#define encoderPinB2 12  // Encoder B Channel 2
+
+// Pin definitions for Motor A
+const int motorA_IN1 = 0;  // Motor A IN1 pin
+const int motorA_PWM = 2;  // Motor A PWM pin (Enable pin)
+
+// Pin definitions for Motor B
+const int motorB_IN1 = 15;  // Motor B IN1 pin
+const int motorB_PWM = 13;  // Motor B PWM pin (Enable pin)
+#endif
 
 // PWM starting points for Motors
 uint8_t pwmOffsetA = 0; // PWM value for Motor A
@@ -101,7 +120,7 @@ PID motorSpeedPIDB(&speed2, &output2, &targetSpeed1, KpB2, KiB2, KdB1, DIRECT);
 
 // Variables to handle serial command parsing
 int arg = 0;
-int index = 0;
+int index1 = 0;
 char chr;            // Holds the input character
 char cmd;            // Holds the current command
 char argv1[16];      // Holds the first argument as a string
@@ -110,8 +129,15 @@ long arg1;           // First argument converted to integer
 long arg2;           // Second argument converted to integer
 
 // Function declarations
+#ifdef ARDUINO_NANO
 void manageCountA(); // ISR for Encoder A
 void manageCountB(); // ISR for Encoder B
+#endif
+#ifdef nodeMCU
+ICACHE_RAM_ATTR void manageCountA(); // ISR for Encoder A
+ICACHE_RAM_ATTR void manageCountB(); // ISR for Encoder B
+#endif
+
 int calculateRPMA(); // Function to calculate RPM for Motor A
 int calculateRPMB(); // Function to calculate RPM for Motor B
 double calculateAngleA(); // Function to calculate the angle of rotation for Motor A
@@ -128,7 +154,7 @@ void resetCommand() {
   arg1 = 0;
   arg2 = 0;
   arg = 0;
-  index = 0;
+  index1 = 0;
 }
 
 // Timing variables for running PID at a set interval (30 times per second)
@@ -393,8 +419,8 @@ void loop() {
 
     // Execute command on carriage return (CR)
     if (chr == 13) {  // ASCII value for CR
-      if (arg == 1) argv1[index] = '\0';
-      else if (arg == 2) argv2[index] = '\0';
+      if (arg == 1) argv1[index1] = '\0';
+      else if (arg == 2) argv2[index1] = '\0';
       runCommand();       // Run the parsed command
       resetCommand();     // Reset command variables for next input
     } 
@@ -402,9 +428,9 @@ void loop() {
     else if (chr == ' ') {
       if (arg == 0) arg = 1;     // Move to first argument
       else if (arg == 1) {       // Move to second argument
-        argv1[index] = '\0';
+        argv1[index1] = '\0';
         arg = 2;
-        index = 0;
+        index1 = 0;
       }
       continue;
     }
@@ -413,14 +439,16 @@ void loop() {
       if (arg == 0) {
         cmd = chr;  // Store the command
       } else if (arg == 1) {
-        argv1[index++] = chr;  // Store the first argument
+        argv1[index1++] = chr;  // Store the first argument
       } else if (arg == 2) {
-        argv2[index++] = chr;  // Store the second argument
+        argv2[index1++] = chr;  // Store the second argument
       }
     }
   }
 
 }
+
+#ifdef ARDUINO_NANO
 
 // Interrupt service routine (ISR) for Encoder A
 void manageCountA() {
@@ -441,6 +469,31 @@ void manageCountB() {
     countB++;  // Reverse rotation
   }
 }
+#endif
+
+#ifdef nodeMCU
+
+// Interrupt service routine (ISR) for Encoder A
+ICACHE_RAM_ATTR void manageCountA() {
+  // Check the state of encoderPinA2 to determine direction
+  if (digitalRead(encoderPinA2) == 0) {
+    countA--;  // Forward rotation
+  } else {
+    countA++;  // Reverse rotation
+  }
+}
+
+// Interrupt service routine (ISR) for Encoder B
+ICACHE_RAM_ATTR void manageCountB() {
+  // Check the state of encoderPinB2 to determine direction
+  if (digitalRead(encoderPinB2) == 0) {
+    countB--;  // Forward rotation
+  } else {
+    countB++;  // Reverse rotation
+  }
+}
+
+#endif
 
 // Function to calculate RPM for Motor A
 int calculateRPMA() {
