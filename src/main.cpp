@@ -31,7 +31,7 @@ const int motorA_IN1 = 7;  // Motor A IN1 pin
 const int motorA_PWM = 6;  // Motor A PWM pin (Enable pin)
 
 // Pin definitions for Motor B
-const int motorB_IN1 = 10;  // Motor B IN1 pin
+const int motorB_IN1 = 8;  // Motor B IN1 pin
 const int motorB_PWM = 9;  // Motor B PWM pin (Enable pin)
 
 // PWM starting points for Motors
