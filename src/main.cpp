@@ -2,6 +2,9 @@
 #include <PID_v1.h>
 
 //#define DEBUG
+//#define BENCHMARK
+
+
 //#define ARDUINO_NANO
 #define nodeMCU
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -353,7 +356,32 @@ void runCommand() {
 
 ////////////////////////////////////////////////////
 
+#ifdef BENCHMARK
+// Function to measure the loop frequency 
+unsigned long previousMillis = 0;
+unsigned long loopCounter = 0;
 
+void benchmarkLoopFrequency() {
+  unsigned long currentMillis = millis();
+
+  // Count the number of times the loop runs
+  loopCounter++;
+
+  // Check if one second (1000 milliseconds) has passed
+  if (currentMillis - previousMillis >= 1000) {
+    // Print the number of loops in the past second
+    Serial.print("Loops per second: ");
+    Serial.println(loopCounter);
+
+    // Reset the counter for the next second
+    loopCounter = 0;
+
+    // Update the previousMillis for the next timing interval
+    previousMillis = currentMillis;
+  }
+}
+
+#endif
 
 
 // Setup function to initialize motors, encoders, and serial communication
@@ -394,6 +422,12 @@ void setup() {
 
 // Main loop function
 void loop() {
+
+#ifdef BENCHMARK
+//benchmarks loop frequency
+benchmarkLoopFrequency();
+#endif
+
   unsigned long currentTime = millis();
   if (currentTime - lastUpdateTime >= interval) {
     lastUpdateTime = currentTime;
