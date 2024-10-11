@@ -2,8 +2,8 @@
 #include <PID_v1.h>
 
 //#define DEBUG
-#define ARDUINO_NANO
-//#define nodeMCU
+//#define ARDUINO_NANO
+#define nodeMCU
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////Serial Control Commands////////////////////////////////////////////
 // Define command characters for various actions
@@ -19,6 +19,7 @@
 #define UPDATE_PIDAB    'v' // Update angle PID values for Motor B (Kp, Ki, Kd) eg: v 10:20:30
 #define UPDATE_PIDSA    'w' // Update speed PID values for Motor A (Kp, Ki, Kd) eg: w 10:20:30
 #define UPDATE_PIDSB    'x' // Update speed PID values for Motor B (Kp, Ki, Kd) eg: x 10:20:30
+#define GET_INP_TAR     'g' // prints target and input values for specified pid eg: g 1 , g 0 for disabling the printing
 
 //////////////////////////////////////////////////////////////////////////////////////
 #ifdef ARDUINO_NANO
@@ -75,6 +76,9 @@ long prevCountB = 0;          // Previous encoder count for Motor B
 
 // PID Controller Mode
 bool mode; // Mode for PID controller mode 0 for angle PID and 1 for speed PID
+
+// Mode select for printing feedback and target values
+u8 modePrint = 0; // 0 for none, 1 for angle PIDA, 2 for angle PIDB etc
 
 double output1 = 0; // Output for Motor A
 double output2 = 0; // Output for Motor B
@@ -134,8 +138,8 @@ void manageCountA(); // ISR for Encoder A
 void manageCountB(); // ISR for Encoder B
 #endif
 #ifdef nodeMCU
-ICACHE_RAM_ATTR void manageCountA(); // ISR for Encoder A
-ICACHE_RAM_ATTR void manageCountB(); // ISR for Encoder B
+IRAM_ATTR void manageCountA(); // ISR for Encoder A
+IRAM_ATTR void manageCountB(); // ISR for Encoder B
 #endif
 
 int calculateRPMA(); // Function to calculate RPM for Motor A
@@ -160,8 +164,6 @@ void resetCommand() {
 // Timing variables for running PID at a set interval (30 times per second)
 unsigned long lastUpdateTime = 0;
 const int interval = 33; // Time interval in milliseconds (1000ms/30 = ~33ms)
-
-
 
 
 // Function to run the appropriate command based on serial input
@@ -335,6 +337,13 @@ void runCommand() {
       #endif
       break;
 
+    case GET_INP_TAR:
+      #ifdef DEBUG
+      Serial.print("Starting to print input and target")
+      #endif
+      modePrint = arg1;
+      break;
+
     
     default:
       Serial.println("Invalid command");
@@ -389,6 +398,31 @@ void loop() {
   if (currentTime - lastUpdateTime >= interval) {
     lastUpdateTime = currentTime;
 
+    //For printing input and target values
+    if (modePrint == 0){
+    }
+    else if (modePrint == 1){
+      Serial.print(angle1);
+      Serial.print(" ");
+      Serial.println(targetAngle1);
+    }
+    else if (modePrint == 2){
+      Serial.print(angle2);
+      Serial.print(" ");
+      Serial.println(targetAngle2);
+    }
+    else if (modePrint == 3){
+      Serial.print(speed1);
+      Serial.print(" ");
+      Serial.println(targetSpeed1);
+    }
+    else if (modePrint == 4){
+      Serial.print(speed2);
+      Serial.print(" ");
+      Serial.println(targetSpeed2);
+    }
+
+    // works as angle PID
     if (mode == 0) {
       // Calculate Angle for Motor A
       angle1 = calculateAngleA();
@@ -400,6 +434,7 @@ void loop() {
       controlMotorA(output1);
       controlMotorB(output2);
     }
+    // works as speed PID
     else if (mode == 1) {
       // Calculate RPM for Motor A
       speed1 = calculateRPMA();
@@ -474,7 +509,7 @@ void manageCountB() {
 #ifdef nodeMCU
 
 // Interrupt service routine (ISR) for Encoder A
-ICACHE_RAM_ATTR void manageCountA() {
+IRAM_ATTR void manageCountA() {
   // Check the state of encoderPinA2 to determine direction
   if (digitalRead(encoderPinA2) == 0) {
     countA--;  // Forward rotation
@@ -484,7 +519,7 @@ ICACHE_RAM_ATTR void manageCountA() {
 }
 
 // Interrupt service routine (ISR) for Encoder B
-ICACHE_RAM_ATTR void manageCountB() {
+IRAM_ATTR void manageCountB() {
   // Check the state of encoderPinB2 to determine direction
   if (digitalRead(encoderPinB2) == 0) {
     countB--;  // Forward rotation
