@@ -214,6 +214,7 @@ void controlMotorA(double speed);                  // Function to control Motor 
 void controlMotorB(double speed);                  // Function to control Motor B speed and direction
 void controlMotor(double speed, int IN1, int PWM); // General function to control any motor based on speed (negative for reverse, positive for forward)
 void ppm_pid_tuner();                              // Function to control PID tuners using RF remote
+void PrintPIDValues();                              // Function to print PID input, target, output values to Serial Monitor for tuning
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////Serial Controls//////////////////////////////////////////////////////
 
@@ -486,12 +487,14 @@ void runCommand()
     ppmTuner = !ppmTuner;
     if (ppmTuner)
     {
+      ppminterrupt = true;
       Serial.println("ppmTuner on");
     }
     else
     {
       Serial.println("ppmTuner off");
     }
+    break;
   default:
     Serial.println("Invalid command");
     break;
