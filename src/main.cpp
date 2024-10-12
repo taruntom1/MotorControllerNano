@@ -80,8 +80,13 @@ unsigned long prevTimeB = 0;  // Previous timestamp for Motor B
 long prevCountB = 0;          // Previous encoder count for Motor B
 
 
+// Timing variables for running PID at a set interval (30 times per second)
+unsigned long lastUpdateTime = 0;
+const int interval = 33333; // Time interval in microseconds (1000ms/30 = ~33ms)
 
-
+// Timing variables for running ppm tuning at a set interval (5 times per second)
+unsigned long lastUpdateTimePPM = 0;
+const int intervalPPM = 200000; // Time interval in microseconds (1000ms/5 = 200ms)
 // PID Controller Mode
 bool mode; // Mode for PID controller mode 0 for angle PID and 1 for speed PID
 
@@ -232,9 +237,7 @@ void resetCommand() {
   index1 = 0;
 }
 
-// Timing variables for running PID at a set interval (30 times per second)
-unsigned long lastUpdateTime = 0;
-const int interval = 33333; // Time interval in milliseconds (1000ms/30 = ~33ms)
+
 
 
 // Function to run the appropriate command based on serial input
@@ -543,10 +546,7 @@ benchmarkLoopFrequency();
   if (currentTime - lastUpdateTime >= interval) {
     lastUpdateTime = currentTime;
 
-    // tuning through ppm
-    if(ppmTuner){
-      ppm_pid_tuner();
-    }
+    
     //For printing input and target values
     if (modePrint == 0){
     }
@@ -613,7 +613,13 @@ benchmarkLoopFrequency();
       controlMotorB(output2);
     }
   }
-
+  if(currentTime - lastUpdateTimePPM >= intervalPPM) {
+    lastUpdateTimePPM = currentTime;
+    // tuning through ppm
+    if(ppmTuner){
+      ppm_pid_tuner();
+    }
+  }
   while (Serial.available() > 0) {
     
     chr = Serial.read();  // Read the next character
