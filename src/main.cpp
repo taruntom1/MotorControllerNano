@@ -11,13 +11,13 @@
 ///////////////////////////Serial Control Commands////////////////////////////////////////////
 // Define command characters for various actions
 #define SET_MOTOR_PWM_OFSET 'o' // Set motor PWM offset (0-255) eg: o 100 100
-#define MOTOR_ANGLES   'a' // Set motor angles (degrees) eg: a 100 200
-#define READ_ENCODERS  'e' // Read encoder counts (counts) eg: e
-#define READ_SPEEDS   's' // Read motor speeds (RPM) eg: s
-#define MOTOR_SPEEDS   'm' // Set motor speeds (RPM) eg: m 100 200
-#define MOTOR_PWM      'n' // Set motor PWM (0-255) eg: f 100 200
-#define PING           'p' // Ping the Arduino
-#define RESET_ENCODERS 'r' // Reset encoder counts (counts) eg: r
+#define MOTOR_ANGLES        'a' // Set motor angles (degrees) eg: a 100 200
+#define READ_ENCODERS       'e' // Read encoder counts (counts) eg: e
+#define READ_SPEEDS         's' // Read motor speeds (RPM) eg: s
+#define MOTOR_SPEEDS        'm' // Set motor speeds (RPM) eg: m 100 200
+#define MOTOR_PWM       'n' // Set motor PWM (0-255) eg: f 100 200
+#define PING            'p' // Ping the Arduino
+#define RESET_ENCODERS  'r' // Reset encoder counts (counts) eg: r
 #define UPDATE_PIDAA    'u' // Update angle PID values for Motor A (Kp, Ki, Kd) eg: u 10:20:30
 #define UPDATE_PIDAB    'v' // Update angle PID values for Motor B (Kp, Ki, Kd) eg: v 10:20:30
 #define UPDATE_PIDSA    'w' // Update speed PID values for Motor A (Kp, Ki, Kd) eg: w 10:20:30
@@ -25,10 +25,13 @@
 #define GET_INP_TAR     'g' // prints target and input values for specified pid eg: g 1 , g 0 for disabling the printing
 #define PRINT_PPM       'z' // print PPM signal
 #define PPM_INTRRUPT    'i'  // enable/disable ppm interrupt
+#define PPM_TUNE        't' // set the ppm output pin
+#define PRINT_PID_CONST 'k'    // ppm output pin
 
 //////////////////////////////////////////////////////////////////////////////////////
 #ifdef ARDUINO_NANO
-// Pin definitions for Encoders
+// Pin definitions for Encodersk
+
 #define encoderPinA1 2  // Encoder A Channel 1
 #define encoderPinA2 4  // Encoder A Channel 2
 #define encoderPinB1 3  // Encoder B Channel 1
@@ -85,6 +88,8 @@ bool mode; // Mode for PID controller mode 0 for angle PID and 1 for speed PID
 // PPM print mode
 bool ppmPrint = 0; // Print PPM signal to serial monitor when true
 bool ppminterrupt = 0; // Turns on or off ppm interrupt
+//ppm-pid tuner on/off
+bool ppmTuner = 0; // Turns on or off ppm tuner
 
 // Mode select for printing feedback and target values
 u8 modePrint = 0; // 0 for none, 1 for angle PIDA, 2 for angle PIDB etc
@@ -165,9 +170,9 @@ const int SYNC_GAP = 3000; // 3ms gap considered as sync
 IRAM_ATTR void ppmISR() {
   // Measure the time since the last pulse
   
-  unsigned long currentTime = micros();
-  unsigned long pulseWidth = currentTime - lastPulseTime;
-  lastPulseTime = currentTime;
+  unsigned long currenttime = micros();
+  unsigned long pulseWidth = currenttime - lastPulseTime;
+  lastPulseTime = currenttime;
 
   // Check if the pulse width indicates a sync pulse
   if (pulseWidth >= SYNC_GAP) {
@@ -200,6 +205,7 @@ double calculateAngleB(); // Function to calculate the angle of rotation for Mot
 void controlMotorA(double speed); // Function to control Motor A speed and direction
 void controlMotorB(double speed); // Function to control Motor B speed and direction
 void controlMotor(double speed, int IN1, int PWM); // General function to control any motor based on speed (negative for reverse, positive for forward)
+void ppm_pid_tuner(); // Function to control PID tuners using RF remote
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////Serial Controls//////////////////////////////////////////////////////
 
@@ -419,6 +425,36 @@ void runCommand() {
       if(ppminterrupt){attachInterrupt(digitalPinToInterrupt(PPM_PIN), ppmISR, FALLING);}
       else{detachInterrupt(digitalPinToInterrupt(PPM_PIN));}
       break;
+    case PRINT_PID_CONST:
+      Serial.print("AnglePID 1 kp: ");
+      Serial.print(motorAnglePIDA.GetKp());
+      Serial.print("\tki: ");
+      Serial.print(motorAnglePIDA.GetKi());
+      Serial.print("\tkd: ");
+      Serial.println(motorAnglePIDA.GetKd());
+      Serial.print("AnglePID 2 kp:");
+      Serial.print(motorAnglePIDB.GetKp());
+      Serial.print("\tki: ");
+      Serial.print(motorAnglePIDB.GetKi());
+      Serial.print("\tkd: ");
+      Serial.println(motorAnglePIDB.GetKd());
+      Serial.print("SpeedPID 1 kp: ");
+      Serial.print(motorSpeedPIDA.GetKp());
+      Serial.print("\tki: ");
+      Serial.print(motorSpeedPIDA.GetKi());
+      Serial.print("\tkd: ");
+      Serial.println(motorSpeedPIDA.GetKd());
+      Serial.print("SpeedPID 2 kp:");
+      Serial.print(motorSpeedPIDB.GetKp());
+      Serial.print("\tki: ");
+      Serial.print(motorSpeedPIDB.GetKi());
+      Serial.print("\tkd: ");
+      Serial.println(motorSpeedPIDB.GetKd());
+      break;
+    case PPM_TUNE:
+      ppmTuner = !ppmTuner;
+      if(ppmTuner){Serial.println("ppmTuner on");}
+      else{Serial.println("ppmTuner off");}
     default:
       Serial.println("Invalid command");
       break;
@@ -507,6 +543,10 @@ benchmarkLoopFrequency();
   if (currentTime - lastUpdateTime >= interval) {
     lastUpdateTime = currentTime;
 
+    // tuning through ppm
+    if(ppmTuner){
+      ppm_pid_tuner();
+    }
     //For printing input and target values
     if (modePrint == 0){
     }
@@ -745,3 +785,122 @@ void controlMotorB(double speed) {
   }
 }
 
+
+void ppm_pid_tuner(){
+  u8 control1 = 0;
+  u8 control2 = 0;
+
+  float val = ((float)(ppmChannels[2]-1000))/1000;
+  if(ppmChannels[4] < 1150){
+    control1 = 0;
+  }
+  else if(ppmChannels[4] < 1310){
+    control1 = 1;
+  }
+  else if(ppmChannels[4] < 1480){
+    control1 = 2;
+  }
+  else if(ppmChannels[4] < 1650){
+    control1 = 3;
+  }
+  else if(ppmChannels[4] < 1820){
+    control1 = 4;
+  }
+  else {
+    control1 = 5;
+  }
+
+  if(ppmChannels[5] < 1300){
+    control2 = 0;
+  }
+  else if(ppmChannels[5] < 1600){
+    control2 = 1;
+  }
+  else {
+    control2 = 2;
+  }
+ 
+  switch (control1)
+  {
+  case 0:
+    switch (control2)
+    {
+    case 0:
+      KpA1 = val;
+      motorAnglePIDA.SetTunings(KpA1, KiA1, KdA1);
+      break;
+    case 1:
+      KiA1 = val;
+      motorAnglePIDA.SetTunings(KpA1, KiA1, KdA1);
+      break;
+    case 2:
+      KdA1 = val;
+      motorAnglePIDA.SetTunings(KpA1, KiA1, KdA1);
+      break;
+    default:
+      break;
+    }
+    break;
+  case 1:
+    switch (control2)
+    {
+    case 0:
+      KpA2 = val;
+      motorAnglePIDB.SetTunings(KpA2, KiA2, KdA2);
+      break;
+    case 1:
+      KiA2 = val;
+      motorAnglePIDB.SetTunings(KpA2, KiA2, KdA2);
+      break;
+    case 2:
+      KdA2 = val;
+      motorAnglePIDB.SetTunings(KpA2, KiA2, KdA2);
+      break;
+    default:
+      break;
+    }
+    break;
+  case 2:
+    switch (control2)
+    {
+    case 0:
+      KpB1 = val;
+      motorSpeedPIDA.SetTunings(KpB1, KiB1, KdB1);
+      break;
+    case 1:
+      KiB1 = val;
+      motorSpeedPIDA.SetTunings(KpB1, KiB1, KdB1);
+      break;
+    case 2:
+      KdB1 = val;
+      motorSpeedPIDA.SetTunings(KpB1, KiB1, KdB1);
+      break;
+    default:
+     break;
+    }
+    break;
+  case 3:
+  {
+    switch (control2)
+    {
+    case 0:
+      KpB2 = val;
+      motorSpeedPIDB.SetTunings(KpB2, KiB2, KdB2);
+      break;
+    case 1:
+      KiB2 = val;
+      motorSpeedPIDB.SetTunings(KpB2, KiB2, KdB2);
+      break;
+    case 2:
+      KdB2 = val;
+      motorSpeedPIDB.SetTunings(KpB2, KiB2, KdB2);
+      break;
+    default:
+      break;
+    }
+    break;
+  }
+  default:
+    break;
+  }
+}
