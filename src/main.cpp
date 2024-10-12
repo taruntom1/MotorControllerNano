@@ -23,6 +23,8 @@
 #define UPDATE_PIDSA    'w' // Update speed PID values for Motor A (Kp, Ki, Kd) eg: w 10:20:30
 #define UPDATE_PIDSB    'x' // Update speed PID values for Motor B (Kp, Ki, Kd) eg: x 10:20:30
 #define GET_INP_TAR     'g' // prints target and input values for specified pid eg: g 1 , g 0 for disabling the printing
+#define PRINT_PPM       'z' // print PPM signal
+#define PPM_INTRRUPT    'i'  // enable/disable ppm interrupt
 
 //////////////////////////////////////////////////////////////////////////////////////
 #ifdef ARDUINO_NANO
@@ -53,8 +55,8 @@ const int motorA_IN1 = 0;  // Motor A IN1 pin
 const int motorA_PWM = 2;  // Motor A PWM pin (Enable pin)
 
 // Pin definitions for Motor B
-const int motorB_IN1 = 15;  // Motor B IN1 pin
-const int motorB_PWM = 13;  // Motor B PWM pin (Enable pin)
+const int motorB_IN1 = 16;  // Motor B IN1 pin
+const int motorB_PWM = 15;  // Motor B PWM pin (Enable pin)
 #endif
 
 // PWM starting points for Motors
@@ -79,6 +81,10 @@ long prevCountB = 0;          // Previous encoder count for Motor B
 
 // PID Controller Mode
 bool mode; // Mode for PID controller mode 0 for angle PID and 1 for speed PID
+
+// PPM print mode
+bool ppmPrint = 0; // Print PPM signal to serial monitor when true
+bool ppminterrupt = 0; // Turns on or off ppm interrupt
 
 // Mode select for printing feedback and target values
 u8 modePrint = 0; // 0 for none, 1 for angle PIDA, 2 for angle PIDB etc
@@ -136,21 +142,47 @@ QuickPID motorSpeedPIDB(&speed2, &output2, &targetSpeed1, KpB2, KiB2, KdB1, /* O
               motorSpeedPIDB.iAwMode::iAwCondition,
               motorSpeedPIDB.Action::direct);
 /////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////PPM Reading//////////////////////////////////////////////////////////
+// Pin where the PPM signal is connected
+const int PPM_PIN = 13;
+
+// Number of PPM channels
+const int NUM_CHANNELS = 8;
+
+// Array to store pulse width (in microseconds) for each channel
+volatile int ppmChannels[NUM_CHANNELS] = {0};
+
+// Variable to track current channel
+volatile int currentChannel = 0;
+
+// Variable to store the last pulse time
+volatile unsigned long lastPulseTime = 0;
+
+// Time threshold for frame sync pulse (in microseconds)
+const int SYNC_GAP = 3000; // 3ms gap considered as sync
+
+// Interrupt Service Routine (ISR) to handle the PPM signal
+IRAM_ATTR void ppmISR() {
+  // Measure the time since the last pulse
+  
+  unsigned long currentTime = micros();
+  unsigned long pulseWidth = currentTime - lastPulseTime;
+  lastPulseTime = currentTime;
+
+  // Check if the pulse width indicates a sync pulse
+  if (pulseWidth >= SYNC_GAP) {
+    // Sync pulse detected, reset to the first channel
+    currentChannel = 0;
+  } else {
+    // If valid channel, store the pulse width
+    if (currentChannel < NUM_CHANNELS) {
+      ppmChannels[currentChannel] = pulseWidth;
+      currentChannel++;
+    }
+  }
+}
 /////////////////////////////////////////////////////////////////////////////////////////////////////
-
 /////////////////////////////////////////////////////////////////////////////////////////////////////
-/////////////////////////////////Serial Controls//////////////////////////////////////////////////////
-
-// Variables to handle serial command parsing
-int arg = 0;
-int index1 = 0;
-char chr;            // Holds the input character
-char cmd;            // Holds the current command
-char argv1[16];      // Holds the first argument as a string
-char argv2[16];      // Holds the second argument as a string
-long arg1;           // First argument converted to integer
-long arg2;           // Second argument converted to integer
-
 // Function declarations
 #ifdef ARDUINO_NANO
 void manageCountA(); // ISR for Encoder A
@@ -168,6 +200,20 @@ double calculateAngleB(); // Function to calculate the angle of rotation for Mot
 void controlMotorA(double speed); // Function to control Motor A speed and direction
 void controlMotorB(double speed); // Function to control Motor B speed and direction
 void controlMotor(double speed, int IN1, int PWM); // General function to control any motor based on speed (negative for reverse, positive for forward)
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////Serial Controls//////////////////////////////////////////////////////
+
+// Variables to handle serial command parsing
+int arg = 0;
+int index1 = 0;
+char chr;            // Holds the input character
+char cmd;            // Holds the current command
+char argv1[16];      // Holds the first argument as a string
+char argv2[16];      // Holds the second argument as a string
+long arg1;           // First argument converted to integer
+long arg2;           // Second argument converted to integer
+
+
 
 // Function to clear command parameters
 void resetCommand() {
@@ -363,7 +409,16 @@ void runCommand() {
       modePrint = arg1;
       break;
 
-    
+    case PRINT_PPM:
+      ppmPrint = !ppmPrint;
+      if(ppmPrint){attachInterrupt(digitalPinToInterrupt(PPM_PIN), ppmISR, FALLING); ppminterrupt = true;}
+      else{detachInterrupt(digitalPinToInterrupt(PPM_PIN));}
+      break;
+    case PPM_INTRRUPT:
+      ppminterrupt = !ppminterrupt;
+      if(ppminterrupt){attachInterrupt(digitalPinToInterrupt(PPM_PIN), ppmISR, FALLING);}
+      else{detachInterrupt(digitalPinToInterrupt(PPM_PIN));}
+      break;
     default:
       Serial.println("Invalid command");
       break;
@@ -406,6 +461,8 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(encoderPinA1), manageCountA, RISING);
   attachInterrupt(digitalPinToInterrupt(encoderPinB1), manageCountB, RISING);
 
+
+
   // Initialize serial communication
   Serial.begin(115200);
 
@@ -417,7 +474,9 @@ void setup() {
   pinMode(motorB_IN1, OUTPUT);
   pinMode(motorB_PWM, OUTPUT);
 
-
+  // Set up the PPM input pin
+  pinMode(PPM_PIN, INPUT);
+  
   // Initial settings for PID
   motorAnglePIDA.SetSampleTimeUs(interval);  // Set PID update interval
   motorAnglePIDA.SetOutputLimits(-255 + pwmOffsetA, 255 - pwmOffsetA);   // Set output range
@@ -480,6 +539,15 @@ benchmarkLoopFrequency();
       Serial.println(output2);
     }
 
+    if(ppmPrint){
+      Serial.print("Channels: ");
+      for (int i = 0; i < NUM_CHANNELS; i++) {
+        Serial.print(ppmChannels[i]);
+        Serial.print("\t");
+      }
+      Serial.println();
+    }
+    
     // works as angle PID
     if (mode == 0) {
       // Calculate Angle for Motor A
