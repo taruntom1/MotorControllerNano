@@ -214,7 +214,7 @@ void controlMotorA(double speed);                  // Function to control Motor 
 void controlMotorB(double speed);                  // Function to control Motor B speed and direction
 void controlMotor(double speed, int IN1, int PWM); // General function to control any motor based on speed (negative for reverse, positive for forward)
 void ppm_pid_tuner();                              // Function to control PID tuners using RF remote
-void PrintPIDValues();                              // Function to print PID input, target, output values to Serial Monitor for tuning
+void PrintPIDValues();                             // Function to print PID input, target, output values to Serial Monitor for tuning
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////Serial Controls//////////////////////////////////////////////////////
 
@@ -1020,6 +1020,25 @@ void ppm_pid_tuner()
     }
     break;
   }
+  case 4:
+    motorAnglePIDA.SetMode(motorAnglePIDA.Actions::manual);
+    motorAnglePIDB.SetMode(motorAnglePIDB.Actions::manual);
+    motorSpeedPIDA.SetMode(motorSpeedPIDA.Actions::manual);
+    motorSpeedPIDB.SetMode(motorSpeedPIDB.Actions::manual);
+
+    switch (control2)
+    {
+    case 0:
+      output1 = (int)(val * 255);
+      Serial.println(output1);
+      break;
+    case 1:
+      output2 = (int)(val * 255);
+      Serial.println(output2);
+      break;
+    default:
+      break;
+    }
   default:
     break;
   }
