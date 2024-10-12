@@ -451,10 +451,12 @@ void runCommand()
     if (ppminterrupt)
     {
       attachInterrupt(digitalPinToInterrupt(PPM_PIN), ppmISR, FALLING);
+      Serial.println("PPM interrupt started");
     }
     else
     {
       detachInterrupt(digitalPinToInterrupt(PPM_PIN));
+      Serial.println("PPM interrupt stopped");
     }
     break;
   case PRINT_PID_CONST:
@@ -487,11 +489,12 @@ void runCommand()
     ppmTuner = !ppmTuner;
     if (ppmTuner)
     {
-      ppminterrupt = true;
+      attachInterrupt(digitalPinToInterrupt(PPM_PIN), ppmISR, FALLING);
       Serial.println("ppmTuner on");
     }
     else
     {
+      detachInterrupt(digitalPinToInterrupt(PPM_PIN));
       Serial.println("ppmTuner off");
     }
     break;
@@ -585,7 +588,7 @@ void loop()
     lastUpdateTime = currentTime;
 
     // For printing PID values to serial for tuning
-    if (mode != 0)
+    if (modePrint != 0)
     {
       PrintPIDValues();
     }
@@ -630,6 +633,7 @@ void loop()
   }
   if (currentTime - lastUpdateTimePPM >= intervalPPM)
   {
+
     lastUpdateTimePPM = currentTime;
     // tuning through ppm
     if (ppmTuner)
@@ -1021,10 +1025,10 @@ void ppm_pid_tuner()
     break;
   }
   case 4:
-    motorAnglePIDA.SetMode(motorAnglePIDA.Actions::manual);
-    motorAnglePIDB.SetMode(motorAnglePIDB.Actions::manual);
-    motorSpeedPIDA.SetMode(motorSpeedPIDA.Actions::manual);
-    motorSpeedPIDB.SetMode(motorSpeedPIDB.Actions::manual);
+    motorAnglePIDA.SetMode(0);
+    motorAnglePIDB.SetMode(0);
+    motorSpeedPIDA.SetMode(0);
+    motorSpeedPIDB.SetMode(0);
 
     switch (control2)
     {
