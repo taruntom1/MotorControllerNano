@@ -1,5 +1,5 @@
 #include <Arduino.h>
-#include <PID_v1.h>
+#include <QuickPID.h>
 
 //#define DEBUG
 //#define BENCHMARK
@@ -83,42 +83,58 @@ bool mode; // Mode for PID controller mode 0 for angle PID and 1 for speed PID
 // Mode select for printing feedback and target values
 u8 modePrint = 0; // 0 for none, 1 for angle PIDA, 2 for angle PIDB etc
 
-double output1 = 0; // Output for Motor A
-double output2 = 0; // Output for Motor B
+float output1 = 0; // Output for Motor A
+float output2 = 0; // Output for Motor B
 /////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////Angle PID//////////////////////////////////////////////////////
 
-double angle1 = 0; // Angle of rotation for Motor A
-double targetAngle1 = 0; // Target angle for Motor A
+float angle1 = 0; // Angle of rotation for Motor A
+float targetAngle1 = 0; // Target angle for Motor A
 
-double angle2 = 0; // Angle of rotation for Motor B
-double targetAngle2 = 0; // Target angle for Motor B
+float angle2 = 0; // Angle of rotation for Motor B
+float targetAngle2 = 0; // Target angle for Motor B
 
-// PID constants for motor 1
-double KpA1 = 0.7, KiA1 = 0.1, KdA1 = 0.1;
+// PID constants for motor 1    
+float KpA1 = 0.7, KiA1 = 0.1, KdA1 = 0.1;
 // PID constants for motor 2
-double KpA2 = 0.7, KiA2 = 0.1, KdA2 = 0.1;
+float KpA2 = 0.7, KiA2 = 0.1, KdA2 = 0.1;
 
 // PID Controller Object
-PID motorAnglePIDA(&angle1, &output1, &targetAngle1, KpA1, KiA1, KdA1, DIRECT);
-PID motorAnglePIDB(&angle2, &output2, &targetAngle1, KpA2, KiA2, KdA1, DIRECT);
+QuickPID motorAnglePIDA(&angle1, &output1, &targetAngle1, KpA1, KiA1, KdA1,  /* OPTIONS */
+              motorAnglePIDA.pMode::pOnError,
+              motorAnglePIDA.dMode::dOnError,
+              motorAnglePIDA.iAwMode::iAwCondition,
+              motorAnglePIDA.Action::direct);
+QuickPID motorAnglePIDB(&angle2, &output2, &targetAngle1, KpA2, KiA2, KdA1, /* OPTIONS */
+              motorAnglePIDB.pMode::pOnError,
+              motorAnglePIDB.dMode::dOnError,
+              motorAnglePIDB.iAwMode::iAwCondition,
+              motorAnglePIDB.Action::direct);
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////Speed PID//////////////////////////////////////////////////////
 
-double speed1 = 0; // Speed of Motor A
-double targetSpeed1 = 0; // Target speed for Motor A
+float speed1 = 0; // Speed of Motor A
+float targetSpeed1 = 0; // Target speed for Motor A
 
-double speed2 = 0; // Speed of Motor B
-double targetSpeed2 = 0; // Target speed for Motor B
+float speed2 = 0; // Speed of Motor B
+float targetSpeed2 = 0; // Target speed for Motor B
 
 // PID constants for motor 1
-double KpB1 = 1.0, KiB1 = 0.5, KdB1 = 0.1;
+float KpB1 = 1.0, KiB1 = 0.5, KdB1 = 0.1;
 // PID constants for motor 2
-double KpB2 = 1.0, KiB2 = 0.5, KdB2 = 0.1;
+float KpB2 = 1.0, KiB2 = 0.5, KdB2 = 0.1;
 
-PID motorSpeedPIDA(&speed1, &output1, &targetSpeed1, KpB1, KiB1, KdB1, DIRECT);
-PID motorSpeedPIDB(&speed2, &output2, &targetSpeed1, KpB2, KiB2, KdB1, DIRECT);
+QuickPID motorSpeedPIDA(&speed1, &output1, &targetSpeed1, KpB1, KiB1, KdB1, /* OPTIONS */
+              motorSpeedPIDA.pMode::pOnError,
+              motorSpeedPIDA.dMode::dOnError,
+              motorSpeedPIDA.iAwMode::iAwCondition,
+              motorSpeedPIDA.Action::direct);
+QuickPID motorSpeedPIDB(&speed2, &output2, &targetSpeed1, KpB2, KiB2, KdB1, /* OPTIONS */
+              motorSpeedPIDB.pMode::pOnError,
+              motorSpeedPIDB.dMode::dOnError,
+              motorSpeedPIDB.iAwMode::iAwCondition,
+              motorSpeedPIDB.Action::direct);
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -166,7 +182,7 @@ void resetCommand() {
 
 // Timing variables for running PID at a set interval (30 times per second)
 unsigned long lastUpdateTime = 0;
-const int interval = 33; // Time interval in milliseconds (1000ms/30 = ~33ms)
+const int interval = 33333; // Time interval in milliseconds (1000ms/30 = ~33ms)
 
 
 // Function to run the appropriate command based on serial input
@@ -216,10 +232,10 @@ void runCommand() {
     
     case MOTOR_SPEEDS:
       
-      motorAnglePIDA.SetMode(MANUAL);  // Set PID mode of angle PID A to manual
-      motorAnglePIDB.SetMode(MANUAL);  // Set PID mode of angle PID B to manual
-      motorSpeedPIDA.SetMode(AUTOMATIC);  // Set PID mode of speed PID A to automatic
-      motorSpeedPIDB.SetMode(AUTOMATIC);  // Set PID mode of speed PID B to automatic
+      motorAnglePIDA.SetMode(motorAnglePIDA.Control::manual);  // Set PID mode of angle PID A to manual
+      motorAnglePIDB.SetMode(motorAnglePIDB.Control::manual);  // Set PID mode of angle PID B to manual
+      motorSpeedPIDA.SetMode(motorSpeedPIDA.Control::timer);  // Set PID mode of speed PID A to automatic
+      motorSpeedPIDB.SetMode(motorSpeedPIDB.Control::timer);  // Set PID mode of speed PID B to automatic
 
       mode = 1;   // Set mode flag to 1 (manual)
       
@@ -237,10 +253,10 @@ void runCommand() {
     
     case MOTOR_ANGLES:
 
-      motorSpeedPIDA.SetMode(MANUAL);  // Set PID mode of speed PID A to manual
-      motorSpeedPIDB.SetMode(MANUAL);  // Set PID mode of speed PID B to manual
-      motorAnglePIDA.SetMode(AUTOMATIC);  // Set PID mode of angle PID A to automatic
-      motorAnglePIDB.SetMode(AUTOMATIC);  // Set PID mode of angle PID B to automatic
+      motorSpeedPIDA.SetMode(motorSpeedPIDA.Control::manual);  // Set PID mode of speed PID A to manual
+      motorSpeedPIDB.SetMode(motorSpeedPIDB.Control::manual);  // Set PID mode of speed PID B to manual
+      motorAnglePIDA.SetMode(motorAnglePIDA.Control::timer);  // Set PID mode of angle PID A to automatic
+      motorAnglePIDB.SetMode(motorAnglePIDB.Control::timer);  // Set PID mode of angle PID B to automatic
 
       
 
@@ -403,20 +419,20 @@ void setup() {
 
 
   // Initial settings for PID
-  motorAnglePIDA.SetSampleTime(interval);  // Set PID update interval
+  motorAnglePIDA.SetSampleTimeUs(interval);  // Set PID update interval
   motorAnglePIDA.SetOutputLimits(-255 + pwmOffsetA, 255 - pwmOffsetA);   // Set output range
-  motorAnglePIDB.SetSampleTime(interval);  // Set PID update interval
+  motorAnglePIDB.SetSampleTimeUs(interval);  // Set PID update interval
   motorAnglePIDB.SetOutputLimits(-255 + pwmOffsetB, 255 - pwmOffsetB);  // Set output range
 
-  motorSpeedPIDA.SetSampleTime(interval);  // Set PID update interval
+  motorSpeedPIDA.SetSampleTimeUs(interval);  // Set PID update interval
   motorSpeedPIDA.SetOutputLimits(-255 + pwmOffsetA, 255 - pwmOffsetA);  // Set output range
-  motorSpeedPIDB.SetSampleTime(interval);  // Set PID update interval
+  motorSpeedPIDB.SetSampleTimeUs(interval);  // Set PID update interval
   motorSpeedPIDB.SetOutputLimits(-255 + pwmOffsetB, 255 - pwmOffsetB);  // Set output range
 
-  motorAnglePIDA.SetMode(AUTOMATIC);  // Set PID mode to automatic
-  motorAnglePIDB.SetMode(AUTOMATIC);  // Set PID mode to automatic
-  motorSpeedPIDA.SetMode(MANUAL);  // Set PID mode to manual
-  motorSpeedPIDB.SetMode(MANUAL);  // Set PID mode to manual
+  motorAnglePIDA.SetMode(motorAnglePIDA.Control::timer);  // Set PID mode to automatic
+  motorAnglePIDB.SetMode(motorAnglePIDB.Control::timer);  // Set PID mode to automatic
+  motorSpeedPIDA.SetMode(motorSpeedPIDA.Control::manual);  // Set PID mode to manual
+  motorSpeedPIDB.SetMode(motorSpeedPIDB.Control::manual);  // Set PID mode to manual
 
 }
 
@@ -428,7 +444,7 @@ void loop() {
 benchmarkLoopFrequency();
 #endif
 
-  unsigned long currentTime = millis();
+  unsigned long currentTime = micros();
   if (currentTime - lastUpdateTime >= interval) {
     lastUpdateTime = currentTime;
 
@@ -438,22 +454,30 @@ benchmarkLoopFrequency();
     else if (modePrint == 1){
       Serial.print(angle1);
       Serial.print(" ");
-      Serial.println(targetAngle1);
+      Serial.print(targetAngle1);
+      Serial.print(" ");
+      Serial.println(output1);
     }
     else if (modePrint == 2){
       Serial.print(angle2);
       Serial.print(" ");
-      Serial.println(targetAngle2);
+      Serial.print(targetAngle2);
+      Serial.print(" ");
+      Serial.println(output2);
     }
     else if (modePrint == 3){
       Serial.print(speed1);
       Serial.print(" ");
-      Serial.println(targetSpeed1);
+      Serial.print(targetSpeed1);
+      Serial.print(" ");
+      Serial.println(output1);
     }
     else if (modePrint == 4){
       Serial.print(speed2);
       Serial.print(" ");
-      Serial.println(targetSpeed2);
+      Serial.print(targetSpeed2);
+      Serial.print(" ");
+      Serial.println(output2);
     }
 
     // works as angle PID
