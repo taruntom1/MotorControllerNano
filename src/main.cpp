@@ -577,118 +577,129 @@ void setup()
   motorSpeedPIDA.SetMode(motorSpeedPIDA.Control::manual); // Set PID mode to manual
   motorSpeedPIDB.SetMode(motorSpeedPIDB.Control::manual); // Set PID mode to manual
 }
+void runPIDControl();
+void printPPMChannels();
+void processSerialInput();
 
-// Main loop function
 void loop()
 {
-
 #ifdef BENCHMARK
-  // benchmarks loop frequency
-  benchmarkLoopFrequency();
+  benchmarkLoopFrequency(); // Benchmarks loop frequency if enabled
 #endif
 
-  unsigned long currentTime = micros();
+  unsigned long currentTime = micros(); // Store current time once
+
+  // Handle PID updates at regular intervals
   if (currentTime - lastUpdateTime >= interval)
   {
     lastUpdateTime = currentTime;
 
-    // For printing PID values to serial for tuning
+    // Handle PID control (either angle or speed mode)
+    runPIDControl();
+
+    // Optionally print PID values for tuning
     if (modePrint != 0)
     {
       PrintPIDValues();
     }
 
+    // Handle PPM channel printing if enabled
     if (ppmPrint)
     {
-      Serial.print("Channels: ");
-      for (int i = 0; i < NUM_CHANNELS; i++)
-      {
-        Serial.print(ppmChannels[i]);
-        Serial.print("\t");
-      }
-      Serial.println();
-    }
-
-    // works as angle PID
-    if (mode == 0)
-    {
-      // Calculate Angle for Motor A
-      angle1 = calculateAngleA();
-      motorAnglePIDA.Compute();
-      // Calculate Angle for Motor B
-      angle2 = calculateAngleB();
-      motorAnglePIDB.Compute();
-      // Control Motor A and B
-      controlMotorA(output1);
-      controlMotorB(output2);
-    }
-    // works as speed PID
-    else if (mode == 1)
-    {
-      // Calculate RPM for Motor A
-      speed1 = calculateRPMA();
-      motorSpeedPIDA.Compute();
-      // Calculate RPM for Motor B
-      speed2 = calculateRPMB();
-      motorSpeedPIDB.Compute();
-      // Control Motor A and B
-      controlMotorA(output1);
-      controlMotorB(output2);
+      printPPMChannels();
     }
   }
+
+  // Handle PPM tuner at regular intervals
   if (currentTime - lastUpdateTimePPM >= intervalPPM)
   {
-
     lastUpdateTimePPM = currentTime;
-    // tuning through ppm
     if (ppmTuner)
     {
       ppm_pid_tuner();
     }
   }
+
+  // Process incoming serial commands
+  if (Serial.available() > 0)
+    processSerialInput();
+}
+
+// Function to run the appropriate PID control based on mode
+void runPIDControl()
+{
+  if (mode == 0) // Angle PID mode
+  {
+    angle1 = calculateAngleA(); // Calculate angle for Motor A
+    motorAnglePIDA.Compute();
+
+    angle2 = calculateAngleB(); // Calculate angle for Motor B
+    motorAnglePIDB.Compute();
+
+    controlMotorA(output1);
+    controlMotorB(output2);
+  }
+  else if (mode == 1) // Speed PID mode
+  {
+    speed1 = calculateRPMA(); // Calculate RPM for Motor A
+    motorSpeedPIDA.Compute();
+
+    speed2 = calculateRPMB(); // Calculate RPM for Motor B
+    motorSpeedPIDB.Compute();
+
+    controlMotorA(output1);
+    controlMotorB(output2);
+  }
+}
+
+// Function to print PPM channels
+void printPPMChannels()
+{
+  Serial.print("Channels: ");
+  for (int i = 0; i < NUM_CHANNELS; i++)
+  {
+    Serial.print(ppmChannels[i]);
+    Serial.print("\t");
+  }
+  Serial.println();
+}
+
+// Function to process serial input and commands
+void processSerialInput()
+{
   while (Serial.available() > 0)
   {
+    char chr = Serial.read(); // Read the next character
 
-    chr = Serial.read(); // Read the next character
-
-    // Execute command on carriage return (CR)
-    if (chr == 13)
-    { // ASCII value for CR
+    if (chr == '\r') // Check for carriage return (CR)
+    {
       if (arg == 1)
-        argv1[index1] = '\0';
+        argv1[index1] = '\0'; // Null-terminate first argument
       else if (arg == 2)
-        argv2[index1] = '\0';
-      runCommand();   // Run the parsed command
+        argv2[index1] = '\0'; // Null-terminate second argument
+
+      runCommand();   // Execute the parsed command
       resetCommand(); // Reset command variables for next input
     }
-    // Use spaces to delimit arguments
-    else if (chr == ' ')
+    else if (chr == ' ') // Handle argument delimiter
     {
       if (arg == 0)
-        arg = 1; // Move to first argument
+        arg = 1; // First argument detected
       else if (arg == 1)
-      { // Move to second argument
-        argv1[index1] = '\0';
-        arg = 2;
-        index1 = 0;
+      {
+        argv1[index1] = '\0'; // Null-terminate first argument
+        arg = 2;              // Move to second argument
+        index1 = 0;           // Reset the index for the next argument
       }
-      continue;
     }
-    // Store command and arguments
     else
     {
       if (arg == 0)
-      {
         cmd = chr; // Store the command
-      }
       else if (arg == 1)
-      {
         argv1[index1++] = chr; // Store the first argument
-      }
       else if (arg == 2)
-      {
         argv2[index1++] = chr; // Store the second argument
-      }
     }
   }
 }
@@ -760,7 +771,8 @@ IRAM_ATTR void manageCountB()
 const unsigned long millisToMinutes = 60000; // Keep as integer
 
 // General function to calculate RPM for any motor
-int calculateRPM(unsigned long &prevTime, long &prevCount, volatile long currentCount) {
+int calculateRPM(unsigned long &prevTime, long &prevCount, volatile long currentCount)
+{
   unsigned long currentTime = millis(); // Get current time in milliseconds
 
   // Calculate time difference in milliseconds (integer math)
@@ -770,7 +782,8 @@ int calculateRPM(unsigned long &prevTime, long &prevCount, volatile long current
   long countDiff = currentCount - prevCount;
 
   // Avoid division by zero by checking for very small time differences
-  if (timeDiffMillis == 0) {
+  if (timeDiffMillis == 0)
+  {
     return 0;
   }
 
@@ -786,12 +799,14 @@ int calculateRPM(unsigned long &prevTime, long &prevCount, volatile long current
 }
 
 // Function to calculate RPM for Motor A
-int calculateRPMA() {
+int calculateRPMA()
+{
   return calculateRPM(prevTimeA, prevCountA, countA);
 }
 
 // Function to calculate RPM for Motor B
-int calculateRPMB() {
+int calculateRPMB()
+{
   return calculateRPM(prevTimeB, prevCountB, countB);
 }
 
