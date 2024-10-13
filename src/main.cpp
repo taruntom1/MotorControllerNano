@@ -52,6 +52,9 @@ const int motorB_PWM = 9; // Motor B PWM pin (Enable pin)
 #define encoderPinB1 14 // Encoder B Channel 1
 #define encoderPinB2 12 // Encoder B Channel 2
 
+// Constants for PWM limit
+const int PWM_MAX = 255;
+
 // Pin definitions for Motor A
 const int motorA_IN1 = 0; // Motor A IN1 pin
 const int motorA_PWM = 2; // Motor A PWM pin (Enable pin)
@@ -246,268 +249,194 @@ void resetCommand()
 }
 
 // Function to run the appropriate command based on serial input
-void runCommand()
-{
-  int i = 0;
-  char *p = argv1;
-  char *str;
-  int pid_args[4];    // Holds parsed PID values
-  arg1 = atoi(argv1); // Convert argv1 to integer
-  arg2 = atoi(argv2); // Convert argv2 to integer
 
-  switch (cmd)
-  {
-  case PING:
-    Serial.println(arg1); // Respond with argument 1
-    break;
 
-  case READ_ENCODERS:
-    Serial.print(countA); // Respond with encoder count A
-    Serial.print(" ");
-    Serial.println(countB); // Respond with encoder count B
-    break;
-
-  case SET_MOTOR_PWM_OFSET:
-    pwmOffsetA = arg1;                                                   // Set PWM offset for Motor A
-    pwmOffsetB = arg2;                                                   // Set PWM offset for Motor B
-    motorAnglePIDA.SetOutputLimits(-255 + pwmOffsetA, 255 - pwmOffsetA); // Set output range for Motor A
-    motorAnglePIDB.SetOutputLimits(-255 + pwmOffsetB, 255 - pwmOffsetB); // Set output range for Motor B
-    motorSpeedPIDA.SetOutputLimits(-255 + pwmOffsetA, 255 - pwmOffsetA); // Set output range for Motor A
-    motorSpeedPIDB.SetOutputLimits(-255 + pwmOffsetB, 255 - pwmOffsetB); // Set output range for Motor B
-#ifdef DEBUG
-    Serial.print("PWM Offset A: ");
-    Serial.println(pwmOffsetA);
-    Serial.print("PWM Offset B: ");
-    Serial.println(pwmOffsetB);
-#endif
-    break;
-  case READ_SPEEDS:
-    Serial.print(calculateRPMA()); // Respond with RPM of motor A
-    Serial.print(" ");
-    Serial.println(calculateRPMB()); // Respond with RPM of motor B
-    break;
-  case RESET_ENCODERS:
-    countA = 0; // Reset encoder count A to zero
-    countB = 0; // Reset encoder count B to zero
-    Serial.println("Encoders reseted");
-    break;
-
-  case MOTOR_SPEEDS:
-
-    motorAnglePIDA.SetMode(motorAnglePIDA.Control::manual); // Set PID mode of angle PID A to manual
-    motorAnglePIDB.SetMode(motorAnglePIDB.Control::manual); // Set PID mode of angle PID B to manual
-    motorSpeedPIDA.SetMode(motorSpeedPIDA.Control::timer);  // Set PID mode of speed PID A to automatic
-    motorSpeedPIDB.SetMode(motorSpeedPIDB.Control::timer);  // Set PID mode of speed PID B to automatic
-
-    mode = 1; // Set mode flag to 1 (manual)
-
-    targetSpeed1 = arg1; // Set target speed of motor 1 to argument 1
-    targetSpeed2 = arg2; // Set target speed of motor 2 to argument 2
-
-#ifdef DEBUG
-    Serial.print("Speed 1: ");
-    Serial.println(arg1);
-    Serial.print("Speed 2: ");
-    Serial.println(arg2);
-#endif
-
-    break;
-
-  case MOTOR_ANGLES:
-
-    motorSpeedPIDA.SetMode(motorSpeedPIDA.Control::manual); // Set PID mode of speed PID A to manual
-    motorSpeedPIDB.SetMode(motorSpeedPIDB.Control::manual); // Set PID mode of speed PID B to manual
-    motorAnglePIDA.SetMode(motorAnglePIDA.Control::timer);  // Set PID mode of angle PID A to automatic
-    motorAnglePIDB.SetMode(motorAnglePIDB.Control::timer);  // Set PID mode of angle PID B to automatic
-
-    mode = 0; // Set mode flag to 0 (manual)
-
-    targetAngle1 = calculateAngleA() + arg1; // Set target angle of motor 1 to argument 1 + current angle
-    targetAngle2 = calculateAngleB() + arg2; // Set target angle of motor 2 to argument 2 + current angle
-
-#ifdef DEBUG
-    Serial.print("Speed 1: ");
-    Serial.println(arg1);
-    Serial.print("Speed 2: ");
-    Serial.println(arg2);
-#endif
-
-    break;
-
-  case MOTOR_PWM:
-    controlMotorA(arg1); // Set PWM of motor 1 to argument 1
-    controlMotorB(arg2); // Set PWM of motor 2 to argument 2
-    break;
-  case UPDATE_PIDAA:
-    // Parse PID values for Motor A
-    while ((str = strtok_r(p, ":", &p)) != NULL)
-    {
-      pid_args[i] = atoi(str);
-      i++;
+// Helper function to parse and set PID values
+void updatePID(float &Kp, float &Ki, float &Kd, char *input) {
+    int pid_args[3] = {0}; // Holds parsed PID values
+    char *str;
+    int i = 0;
+    
+    while ((str = strtok_r(input, ":", &input)) != NULL && i < 3) {
+        pid_args[i++] = atoi(str);
     }
-    KpA1 = pid_args[0];
-    KiA1 = pid_args[1];
-    KdA1 = pid_args[2];
-    // Set PID values for motor A
-    motorAnglePIDA.SetTunings(KpA1, KiA1, KdA1);
 
-#ifdef DEBUG
-    Serial.println("PID A updated");
-    Serial.print("Kp1: ");
-    Serial.println(KpA1);
-    Serial.print("Ki1: ");
-    Serial.println(KiA1);
-    Serial.print("Kd1: ");
-    Serial.println(KdA1);
-#endif
-    break;
-
-  case UPDATE_PIDAB:
-    // Parse PID values for Motor B
-    while ((str = strtok_r(p, ":", &p)) != NULL)
-    {
-      pid_args[i] = atoi(str);
-      i++;
-    }
-    KpA2 = pid_args[0];
-    KiA2 = pid_args[1];
-    KdA2 = pid_args[2];
-    // Set PID values for motor A
-    motorSpeedPIDB.SetTunings(KpA2, KiA2, KdA2);
-#ifdef DEBUG
-    Serial.println("PID B updated");
-    Serial.print("Kp2: ");
-    Serial.println(KpA2);
-    Serial.print("Ki2: ");
-    Serial.println(KiA2);
-    Serial.print("Kd2: ");
-    Serial.println(KdA2);
-#endif
-    break;
-
-  case UPDATE_PIDSA:
-    // Parse PID values for Motor A
-    while ((str = strtok_r(p, ":", &p)) != NULL)
-    {
-      pid_args[i] = atoi(str);
-      i++;
-    }
-    KpB1 = pid_args[0];
-    KiB1 = pid_args[1];
-    KdB1 = pid_args[2];
-    // Set PID values for motor B
-    motorSpeedPIDA.SetTunings(KpB1, KiB1, KdB1);
-#ifdef DEBUG
-    Serial.println("PID A updated");
-    Serial.print("Kp1: ");
-    Serial.println(KpB1);
-    Serial.print("Ki1: ");
-    Serial.println(KiB1);
-    Serial.print("Kd1: ");
-    Serial.println(KdB1);
-#endif
-    break;
-
-  case UPDATE_PIDSB:
-    // Parse PID values for Motor A
-    while ((str = strtok_r(p, ":", &p)) != NULL)
-    {
-      pid_args[i] = atoi(str);
-      i++;
-    }
-    KpB2 = pid_args[0];
-    KiB2 = pid_args[1];
-    KdB2 = pid_args[2];
-    // Set PID values for motor B
-    motorSpeedPIDB.SetTunings(KpB2, KiB2, KdB2);
-
-#ifdef DEBUG
-    Serial.println("PID A updated");
-    Serial.print("Kp1: ");
-    Serial.println(KpB2);
-    Serial.print("Ki1: ");
-    Serial.println(KiB2);
-    Serial.print("Kd1: ");
-    Serial.println(KdB2);
-#endif
-    break;
-
-  case GET_INP_TAR:
-#ifdef DEBUG
-    Serial.print("Starting to print input and target")
-#endif
-        modePrint = arg1;
-    break;
-
-  case PRINT_PPM:
-    ppmPrint = !ppmPrint;
-    if (ppmPrint)
-    {
-      attachInterrupt(digitalPinToInterrupt(PPM_PIN), ppmISR, FALLING);
-      ppminterrupt = true;
-    }
-    else
-    {
-      detachInterrupt(digitalPinToInterrupt(PPM_PIN));
-    }
-    break;
-  case PPM_INTRRUPT:
-    ppminterrupt = !ppminterrupt;
-    if (ppminterrupt)
-    {
-      attachInterrupt(digitalPinToInterrupt(PPM_PIN), ppmISR, FALLING);
-      Serial.println("PPM interrupt started");
-    }
-    else
-    {
-      detachInterrupt(digitalPinToInterrupt(PPM_PIN));
-      Serial.println("PPM interrupt stopped");
-    }
-    break;
-  case PRINT_PID_CONST:
-    Serial.print("AnglePID 1 kp: ");
-    Serial.print(motorAnglePIDA.GetKp());
-    Serial.print("\tki: ");
-    Serial.print(motorAnglePIDA.GetKi());
-    Serial.print("\tkd: ");
-    Serial.println(motorAnglePIDA.GetKd());
-    Serial.print("AnglePID 2 kp:");
-    Serial.print(motorAnglePIDB.GetKp());
-    Serial.print("\tki: ");
-    Serial.print(motorAnglePIDB.GetKi());
-    Serial.print("\tkd: ");
-    Serial.println(motorAnglePIDB.GetKd());
-    Serial.print("SpeedPID 1 kp: ");
-    Serial.print(motorSpeedPIDA.GetKp());
-    Serial.print("\tki: ");
-    Serial.print(motorSpeedPIDA.GetKi());
-    Serial.print("\tkd: ");
-    Serial.println(motorSpeedPIDA.GetKd());
-    Serial.print("SpeedPID 2 kp:");
-    Serial.print(motorSpeedPIDB.GetKp());
-    Serial.print("\tki: ");
-    Serial.print(motorSpeedPIDB.GetKi());
-    Serial.print("\tkd: ");
-    Serial.println(motorSpeedPIDB.GetKd());
-    break;
-  case PPM_TUNE:
-    ppmTuner = !ppmTuner;
-    if (ppmTuner)
-    {
-      attachInterrupt(digitalPinToInterrupt(PPM_PIN), ppmISR, FALLING);
-      Serial.println("ppmTuner on");
-    }
-    else
-    {
-      detachInterrupt(digitalPinToInterrupt(PPM_PIN));
-      Serial.println("ppmTuner off");
-    }
-    break;
-  default:
-    Serial.println("Invalid command");
-    break;
-  }
+    Kp = pid_args[0];
+    Ki = pid_args[1];
+    Kd = pid_args[2];
 }
+
+void runCommand() {
+    int arg1 = atoi(argv1); // Convert argv1 to integer
+    int arg2 = atoi(argv2); // Convert argv2 to integer
+    char *p = argv1;        // Points to argv1
+
+    switch (cmd) {
+    case PING:
+        Serial.println(arg1); // Respond with argument 1
+        break;
+
+    case READ_ENCODERS:
+        Serial.print(countA); Serial.print(" ");
+        Serial.println(countB); // Respond with encoder counts
+        break;
+
+    case SET_MOTOR_PWM_OFSET:
+        pwmOffsetA = arg1;
+        pwmOffsetB = arg2;
+        motorAnglePIDA.SetOutputLimits(-PWM_MAX + pwmOffsetA, PWM_MAX - pwmOffsetA);
+        motorAnglePIDB.SetOutputLimits(-PWM_MAX + pwmOffsetB, PWM_MAX - pwmOffsetB);
+        motorSpeedPIDA.SetOutputLimits(-PWM_MAX + pwmOffsetA, PWM_MAX - pwmOffsetA);
+        motorSpeedPIDB.SetOutputLimits(-PWM_MAX + pwmOffsetB, PWM_MAX - pwmOffsetB);
+        #ifdef DEBUG
+            Serial.print("PWM Offset A: "); Serial.println(pwmOffsetA);
+            Serial.print("PWM Offset B: "); Serial.println(pwmOffsetB);
+        #endif
+        break;
+
+    case READ_SPEEDS:
+        Serial.print(calculateRPMA()); Serial.print(" ");
+        Serial.println(calculateRPMB()); // Respond with RPM of both motors
+        break;
+
+    case RESET_ENCODERS:
+        countA = 0; countB = 0; // Reset encoder counts
+        Serial.println("Encoders reset");
+        break;
+
+    case MOTOR_SPEEDS:
+        motorAnglePIDA.SetMode(motorAnglePIDA.Control::manual); // Angle PID to manual
+        motorAnglePIDB.SetMode(motorAnglePIDB.Control::manual);
+        motorSpeedPIDA.SetMode(motorSpeedPIDA.Control::timer);  // Speed PID to auto
+        motorSpeedPIDB.SetMode(motorSpeedPIDB.Control::timer);
+
+        mode = 1; // Set mode flag to manual
+        targetSpeed1 = arg1;
+        targetSpeed2 = arg2;
+        #ifdef DEBUG
+            Serial.print("Speed 1: "); Serial.println(arg1);
+            Serial.print("Speed 2: "); Serial.println(arg2);
+        #endif
+        break;
+
+    case MOTOR_ANGLES:
+        motorSpeedPIDA.SetMode(motorSpeedPIDA.Control::manual); // Speed PID to manual
+        motorSpeedPIDB.SetMode(motorSpeedPIDB.Control::manual);
+        motorAnglePIDA.SetMode(motorAnglePIDA.Control::timer);  // Angle PID to auto
+        motorAnglePIDB.SetMode(motorAnglePIDB.Control::timer);
+
+        mode = 0; // Set mode flag to angle
+        targetAngle1 = calculateAngleA() + arg1;
+        targetAngle2 = calculateAngleB() + arg2;
+        #ifdef DEBUG
+            Serial.print("Target Angle 1: "); Serial.println(targetAngle1);
+            Serial.print("Target Angle 2: "); Serial.println(targetAngle2);
+        #endif
+        break;
+
+    case MOTOR_PWM:
+        controlMotorA(arg1); controlMotorB(arg2); // Set PWM values
+        break;
+
+    case UPDATE_PIDAA:
+        updatePID(KpA1, KiA1, KdA1, p); // Update PID for Motor A angle
+        motorAnglePIDA.SetTunings(KpA1, KiA1, KdA1);
+        #ifdef DEBUG
+            Serial.print("PID A updated: Kp="); Serial.print(KpA1);
+            Serial.print(", Ki="); Serial.print(KiA1);
+            Serial.print(", Kd="); Serial.println(KdA1);
+        #endif
+        break;
+
+    case UPDATE_PIDAB:
+        updatePID(KpA2, KiA2, KdA2, p); // Update PID for Motor B angle
+        motorSpeedPIDB.SetTunings(KpA2, KiA2, KdA2);
+        #ifdef DEBUG
+            Serial.print("PID B updated: Kp="); Serial.print(KpA2);
+            Serial.print(", Ki="); Serial.print(KiA2);
+            Serial.print(", Kd="); Serial.println(KdA2);
+        #endif
+        break;
+
+    case UPDATE_PIDSA:
+        updatePID(KpB1, KiB1, KdB1, p); // Update PID for Motor A speed
+        motorSpeedPIDA.SetTunings(KpB1, KiB1, KdB1);
+        #ifdef DEBUG
+            Serial.print("PID A updated: Kp="); Serial.print(KpB1);
+            Serial.print(", Ki="); Serial.print(KiB1);
+            Serial.print(", Kd="); Serial.println(KdB1);
+        #endif
+        break;
+
+    case UPDATE_PIDSB:
+        updatePID(KpB2, KiB2, KdB2, p); // Update PID for Motor B speed
+        motorSpeedPIDB.SetTunings(KpB2, KiB2, KdB2);
+        #ifdef DEBUG
+            Serial.print("PID B updated: Kp="); Serial.print(KpB2);
+            Serial.print(", Ki="); Serial.print(KiB2);
+            Serial.print(", Kd="); Serial.println(KdB2);
+        #endif
+        break;
+
+    case GET_INP_TAR:
+        modePrint = arg1; // Set mode for printing
+        #ifdef DEBUG
+            Serial.print("Input Target Print Mode: "); Serial.println(modePrint);
+        #endif
+        break;
+
+    case PRINT_PPM:
+        ppmPrint = !ppmPrint;
+        if (ppmPrint) {
+            attachInterrupt(digitalPinToInterrupt(PPM_PIN), ppmISR, FALLING);
+        } else {
+            detachInterrupt(digitalPinToInterrupt(PPM_PIN));
+        }
+        break;
+
+    case PPM_INTRRUPT:
+        ppminterrupt = !ppminterrupt;
+        if (ppminterrupt) {
+            attachInterrupt(digitalPinToInterrupt(PPM_PIN), ppmISR, FALLING);
+            Serial.println("PPM interrupt started");
+        } else {
+            detachInterrupt(digitalPinToInterrupt(PPM_PIN));
+            Serial.println("PPM interrupt stopped");
+        }
+        break;
+
+    case PRINT_PID_CONST:
+        Serial.print("AnglePID 1 kp: "); Serial.print(motorAnglePIDA.GetKp());
+        Serial.print("\tki: "); Serial.print(motorAnglePIDA.GetKi());
+        Serial.print("\tkd: "); Serial.println(motorAnglePIDA.GetKd());
+        Serial.print("AnglePID 2 kp:"); Serial.print(motorAnglePIDB.GetKp());
+        Serial.print("\tki: "); Serial.print(motorAnglePIDB.GetKi());
+        Serial.print("\tkd: "); Serial.println(motorAnglePIDB.GetKd());
+        Serial.print("SpeedPID 1 kp: "); Serial.print(motorSpeedPIDA.GetKp());
+        Serial.print("\tki: "); Serial.print(motorSpeedPIDA.GetKi());
+        Serial.print("\tkd: "); Serial.println(motorSpeedPIDA.GetKd());
+        Serial.print("SpeedPID 2 kp:"); Serial.print(motorSpeedPIDB.GetKp());
+        Serial.print("\tki: "); Serial.print(motorSpeedPIDB.GetKi());
+        Serial.print("\tkd: "); Serial.println(motorSpeedPIDB.GetKd());
+        break;
+
+    case PPM_TUNE:
+        ppmTuner = !ppmTuner;
+        if (ppmTuner) {
+            attachInterrupt(digitalPinToInterrupt(PPM_PIN), ppmISR, FALLING);
+            Serial.println("PPM Tuner on");
+        } else {
+            detachInterrupt(digitalPinToInterrupt(PPM_PIN));
+            Serial.println("PPM Tuner off");
+        }
+        break;
+
+    default:
+        Serial.println("Invalid command");
+        break;
+    }
+}
+
 
 ////////////////////////////////////////////////////
 
@@ -563,14 +492,14 @@ void setup()
 
   // Initial settings for PID
   motorAnglePIDA.SetSampleTimeUs(interval);                            // Set PID update interval
-  motorAnglePIDA.SetOutputLimits(-255 + pwmOffsetA, 255 - pwmOffsetA); // Set output range
+  motorAnglePIDA.SetOutputLimits(-PWM_MAX + pwmOffsetA, PWM_MAX - pwmOffsetA); // Set output range
   motorAnglePIDB.SetSampleTimeUs(interval);                            // Set PID update interval
-  motorAnglePIDB.SetOutputLimits(-255 + pwmOffsetB, 255 - pwmOffsetB); // Set output range
+  motorAnglePIDB.SetOutputLimits(-PWM_MAX + pwmOffsetB, PWM_MAX - pwmOffsetB); // Set output range
 
   motorSpeedPIDA.SetSampleTimeUs(interval);                            // Set PID update interval
-  motorSpeedPIDA.SetOutputLimits(-255 + pwmOffsetA, 255 - pwmOffsetA); // Set output range
+  motorSpeedPIDA.SetOutputLimits(-PWM_MAX + pwmOffsetA, PWM_MAX - pwmOffsetA); // Set output range
   motorSpeedPIDB.SetSampleTimeUs(interval);                            // Set PID update interval
-  motorSpeedPIDB.SetOutputLimits(-255 + pwmOffsetB, 255 - pwmOffsetB); // Set output range
+  motorSpeedPIDB.SetOutputLimits(-PWM_MAX + pwmOffsetB, PWM_MAX - pwmOffsetB); // Set output range
 
   motorAnglePIDA.SetMode(motorAnglePIDA.Control::timer);  // Set PID mode to automatic
   motorAnglePIDB.SetMode(motorAnglePIDB.Control::timer);  // Set PID mode to automatic
