@@ -2,7 +2,7 @@
 #include <QuickPID.h>
 
 // #define DEBUG
-#define BENCHMARK
+//#define BENCHMARK
 
 // #define ARDUINO_NANO
 #define nodeMCU
@@ -27,42 +27,39 @@
 #define PPM_TUNE 't'            // set the ppm output pin
 #define PRINT_PID_CONST 'k'     // ppm output pin
 
-//////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////
+// Pin definitions
+
 #ifdef ARDUINO_NANO
-// Pin definitions for Encodersk
-
-#define encoderPinA1 2 // Encoder A Channel 1
-#define encoderPinA2 4 // Encoder A Channel 2
-#define encoderPinB1 3 // Encoder B Channel 1
-#define encoderPinB2 5 // Encoder B Channel 2
-
-// Pin definitions for Motor A
-const int motorA_IN1 = 7; // Motor A IN1 pin
-const int motorA_PWM = 6; // Motor A PWM pin (Enable pin)
-
-// Pin definitions for Motor B
-const int motorB_IN1 = 8; // Motor B IN1 pin
-const int motorB_PWM = 9; // Motor B PWM pin (Enable pin)
+  // Nano pin definitions for Encoders and Motors
+  #define encoderPinA1 2
+  #define encoderPinA2 4
+  #define encoderPinB1 3
+  #define encoderPinB2 5
+  const int motorA_DIR = 7;
+  const int motorA_PWM = 6;
+  const int motorB_DIR = 8;
+  const int motorB_PWM = 9;
 #endif
 
 #ifdef nodeMCU
-// Pin definitions for Encoders
-#define encoderPinA1 5  // Encoder A Channel 1
-#define encoderPinA2 4  // Encoder A Channel 2
-#define encoderPinB1 14 // Encoder B Channel 1
-#define encoderPinB2 12 // Encoder B Channel 2
+  // NodeMCU pin definitions for Encoders and Motors
+  #define encoderPinA1 5
+  #define encoderPinA2 4
+  #define encoderPinB1 14
+  #define encoderPinB2 12
+  const int motorA_DIR = 0;
+  const int motorA_PWM = 2;
+  const int motorB_DIR = 16;
+  const int motorB_PWM = 15;
+// Pin where the PPM signal is connected
+#define PPM_PIN 13
+#endif
+
+///////////////////////////////////////////////////////////////////////////////////////////////
 
 // Constants for PWM limit
 const int PWM_MAX = 255;
-
-// Pin definitions for Motor A
-const int motorA_IN1 = 0; // Motor A IN1 pin
-const int motorA_PWM = 2; // Motor A PWM pin (Enable pin)
-
-// Pin definitions for Motor B
-const int motorB_IN1 = 16; // Motor B IN1 pin
-const int motorB_PWM = 15; // Motor B PWM pin (Enable pin)
-#endif
 
 // PWM starting points for Motors
 uint8_t pwmOffsetA = 0; // PWM value for Motor A
@@ -154,8 +151,6 @@ QuickPID motorSpeedPIDB(&speed2, &output2, &targetSpeed1, KpB2, KiB2, KdB1, /* O
                         motorSpeedPIDB.Action::direct);
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////PPM Reading//////////////////////////////////////////////////////////
-// Pin where the PPM signal is connected
-#define PPM_PIN 13
 #define SYNC_GAP 3000 // Adjust as per sync gap width in microseconds
 #define NUM_CHANNELS 8
 #define READ_INTERVAL 50000 // 100 ms in microseconds
@@ -438,7 +433,7 @@ void runCommand() {
 }
 
 
-////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #ifdef BENCHMARK
 // Function to measure the loop frequency
@@ -480,11 +475,11 @@ void setup()
   Serial.begin(115200);
 
   // Set motor control pins as outputs for Motor A
-  pinMode(motorA_IN1, OUTPUT);
+  pinMode(motorA_DIR, OUTPUT);
   pinMode(motorA_PWM, OUTPUT);
 
   // Set motor control pins as outputs for Motor B
-  pinMode(motorB_IN1, OUTPUT);
+  pinMode(motorB_DIR, OUTPUT);
   pinMode(motorB_PWM, OUTPUT);
 
   // Set up the PPM input pin
@@ -759,19 +754,19 @@ void controlMotorA(double speed)
   if (speed > 0)
   {
     // Forward direction
-    digitalWrite(motorA_IN1, HIGH);
+    digitalWrite(motorA_DIR, HIGH);
     analogWrite(motorA_PWM, speed + pwmOffsetA); // Set speed (0-255)
   }
   else if (speed < 0)
   {
     // Reverse direction
-    digitalWrite(motorA_IN1, LOW);
+    digitalWrite(motorA_DIR, LOW);
     analogWrite(motorA_PWM, -speed + pwmOffsetA); // Set speed (0-255), negate for reverse
   }
   else
   {
     // Stop the motor
-    digitalWrite(motorA_IN1, LOW);
+    digitalWrite(motorA_DIR, LOW);
     analogWrite(motorA_PWM, 0);
   }
 }
@@ -782,19 +777,19 @@ void controlMotorB(double speed)
   if (speed > 0)
   {
     // Forward direction
-    digitalWrite(motorB_IN1, HIGH);
+    digitalWrite(motorB_DIR, HIGH);
     analogWrite(motorB_PWM, speed + pwmOffsetB); // Set speed (0-255)
   }
   else if (speed < 0)
   {
     // Reverse direction
-    digitalWrite(motorB_IN1, LOW);
+    digitalWrite(motorB_DIR, LOW);
     analogWrite(motorB_PWM, -speed + pwmOffsetB); // Set speed (0-255), negate for reverse
   }
   else
   {
     // Stop the motor
-    digitalWrite(motorB_IN1, LOW);
+    digitalWrite(motorB_DIR, LOW);
     analogWrite(motorB_PWM, 0);
   }
 }
