@@ -900,150 +900,86 @@ void PrintPIDValues()
   }
 }
 
+void setPIDTunings(float val, float &Kp, float &Ki, float &Kd, QuickPID &pid, u8 control2)
+{
+  bool updated = false;
+
+  if (control2 == 0 && Kp != val)
+  {
+    Kp = val;
+    updated = true;
+  }
+  else if (control2 == 1 && Ki != val)
+  {
+    Ki = val;
+    updated = true;
+  }
+  else if (control2 == 2 && Kd != val)
+  {
+    Kd = val;
+    updated = true;
+  }
+
+  if (updated)
+  {
+    pid.SetTunings(Kp, Ki, Kd);  // Only update PID tunings if any value changes
+  }
+}
+
 void ppm_pid_tuner()
 {
+  // Determine control1 based on ppmChannels[4]
   u8 control1 = 0;
-  u8 control2 = 0;
-
-  float val = ((float)(ppmChannels[2] - 1000)) / 1000;
-  if (ppmChannels[4] < 1150)
+  if (ppmChannels[4] >= 1150)
   {
-    control1 = 0;
-  }
-  else if (ppmChannels[4] < 1310)
-  {
-    control1 = 1;
-  }
-  else if (ppmChannels[4] < 1480)
-  {
-    control1 = 2;
-  }
-  else if (ppmChannels[4] < 1650)
-  {
-    control1 = 3;
-  }
-  else if (ppmChannels[4] < 1820)
-  {
-    control1 = 4;
-  }
-  else
-  {
-    control1 = 5;
+    if (ppmChannels[4] < 1310) control1 = 1;
+    else if (ppmChannels[4] < 1480) control1 = 2;
+    else if (ppmChannels[4] < 1650) control1 = 3;
+    else if (ppmChannels[4] < 1820) control1 = 4;
+    else control1 = 5;
   }
 
-  if (ppmChannels[5] < 1300)
-  {
-    control2 = 0;
-  }
-  else if (ppmChannels[5] < 1600)
-  {
-    control2 = 1;
-  }
-  else
-  {
-    control2 = 2;
-  }
+  // Determine control2 based on ppmChannels[5]
+  u8 control2 = (ppmChannels[5] < 1300) ? 0 : ((ppmChannels[5] < 1600) ? 1 : 2);
+
+
+  float val = (ppmChannels[2] - 1000) * 0.001;  // Scale 'val' between 0 and 1
 
   switch (control1)
   {
   case 0:
-    switch (control2)
-    {
-    case 0:
-      KpA1 = val;
-      motorAnglePIDA.SetTunings(KpA1, KiA1, KdA1);
-      break;
-    case 1:
-      KiA1 = val;
-      motorAnglePIDA.SetTunings(KpA1, KiA1, KdA1);
-      break;
-    case 2:
-      KdA1 = val;
-      motorAnglePIDA.SetTunings(KpA1, KiA1, KdA1);
-      break;
-    default:
-      break;
-    }
+    setPIDTunings(val, KpA1, KiA1, KdA1, motorAnglePIDA, control2);
     break;
   case 1:
-    switch (control2)
-    {
-    case 0:
-      KpA2 = val;
-      motorAnglePIDB.SetTunings(KpA2, KiA2, KdA2);
-      break;
-    case 1:
-      KiA2 = val;
-      motorAnglePIDB.SetTunings(KpA2, KiA2, KdA2);
-      break;
-    case 2:
-      KdA2 = val;
-      motorAnglePIDB.SetTunings(KpA2, KiA2, KdA2);
-      break;
-    default:
-      break;
-    }
+    setPIDTunings(val, KpA2, KiA2, KdA2, motorAnglePIDB, control2);
     break;
   case 2:
-    switch (control2)
-    {
-    case 0:
-      KpB1 = val;
-      motorSpeedPIDA.SetTunings(KpB1, KiB1, KdB1);
-      break;
-    case 1:
-      KiB1 = val;
-      motorSpeedPIDA.SetTunings(KpB1, KiB1, KdB1);
-      break;
-    case 2:
-      KdB1 = val;
-      motorSpeedPIDA.SetTunings(KpB1, KiB1, KdB1);
-      break;
-    default:
-      break;
-    }
+    setPIDTunings(val, KpB1, KiB1, KdB1, motorSpeedPIDA, control2);
     break;
   case 3:
-  {
-    switch (control2)
-    {
-    case 0:
-      KpB2 = val;
-      motorSpeedPIDB.SetTunings(KpB2, KiB2, KdB2);
-      break;
-    case 1:
-      KiB2 = val;
-      motorSpeedPIDB.SetTunings(KpB2, KiB2, KdB2);
-      break;
-    case 2:
-      KdB2 = val;
-      motorSpeedPIDB.SetTunings(KpB2, KiB2, KdB2);
-      break;
-    default:
-      break;
-    }
+    setPIDTunings(val, KpB2, KiB2, KdB2, motorSpeedPIDB, control2);
     break;
-  }
   case 4:
+    // Disable all PID controllers
     motorAnglePIDA.SetMode(0);
     motorAnglePIDB.SetMode(0);
     motorSpeedPIDA.SetMode(0);
     motorSpeedPIDB.SetMode(0);
 
-    switch (control2)
+    // Set direct outputs based on control2
+    if (control2 == 0)
     {
-    case 0:
       output1 = (int)(val * 255);
       Serial.println(output1);
-      break;
-    case 1:
+    }
+    else if (control2 == 1)
+    {
       output2 = (int)(val * 255);
       Serial.println(output2);
-      break;
-    default:
-      break;
     }
+    break;
   default:
     break;
   }
 }
+
