@@ -80,7 +80,7 @@ long prevCountB = 0;         // Previous encoder count for Motor B
 
 // Timing variables for running PID at a set interval (30 times per second)
 unsigned long lastUpdateTime = 0;
-const int interval = 33333; // Time interval in microseconds (1000ms/30 = ~33ms)
+const int interval = 10000; // Time interval in microseconds (1000ms/30 = ~33ms)
 
 // Timing variables for running ppm tuning at a set interval (5 times per second)
 unsigned long lastUpdateTimePPM = 0;
@@ -155,7 +155,7 @@ QuickPID motorSpeedPIDB(&speed2, &output2, &targetSpeed1, KpB2, KiB2, KdB1, /* O
 #define PPM_PIN 13
 #define SYNC_GAP 3000 // Adjust as per sync gap width in microseconds
 #define NUM_CHANNELS 8
-#define READ_INTERVAL 100000 // 100 ms in microseconds
+#define READ_INTERVAL 50000 // 100 ms in microseconds
 
 volatile unsigned long lastPulseTime = 0;
 volatile unsigned long lastReadTime = 0; // Time when last data was read
@@ -756,49 +756,43 @@ IRAM_ATTR void manageCountB()
 
 #endif
 
-// Function to calculate RPM for Motor A
-int calculateRPMA()
-{
-  unsigned long currentTime = millis(); // Get current time in milliseconds
-  long currentCountA = countA;          // Get current encoder count for Motor A
+// Define constant for time conversion to avoid using floating-point division early
+const unsigned long millisToMinutes = 60000; // Keep as integer
 
-  // Calculate time difference in minutes
-  float timeDiffMinutesA = (currentTime - prevTimeA) / 60000.0;
+// General function to calculate RPM for any motor
+int calculateRPM(unsigned long &prevTime, long &prevCount, volatile long currentCount) {
+  unsigned long currentTime = millis(); // Get current time in milliseconds
+
+  // Calculate time difference in milliseconds (integer math)
+  unsigned long timeDiffMillis = currentTime - prevTime;
 
   // Calculate the change in encoder count
-  long countDiffA = currentCountA - prevCountA;
+  long countDiff = currentCount - prevCount;
 
-  // Calculate RPM
-  float rpmA = (countDiffA / countsPerRotation) / timeDiffMinutesA;
+  // Avoid division by zero by checking for very small time differences
+  if (timeDiffMillis == 0) {
+    return 0;
+  }
+
+  // Calculate RPM using integer math where possible, then convert to float only for final division
+  float timeDiffMinutes = timeDiffMillis / static_cast<float>(millisToMinutes);
+  float rpm = (countDiff / static_cast<float>(countsPerRotation)) / timeDiffMinutes;
 
   // Update previous values for next calculation
-  prevTimeA = currentTime;
-  prevCountA = currentCountA;
+  prevTime = currentTime;
+  prevCount = currentCount;
 
-  return static_cast<int>(rpmA);
-  ;
+  return static_cast<int>(rpm); // Return the integer value of the RPM
+}
+
+// Function to calculate RPM for Motor A
+int calculateRPMA() {
+  return calculateRPM(prevTimeA, prevCountA, countA);
 }
 
 // Function to calculate RPM for Motor B
-int calculateRPMB()
-{
-  unsigned long currentTime = millis(); // Get current time in milliseconds
-  long currentCountB = countB;          // Get current encoder count for Motor B
-
-  // Calculate time difference in minutes
-  float timeDiffMinutesB = (currentTime - prevTimeB) / 60000.0;
-
-  // Calculate the change in encoder count
-  long countDiffB = currentCountB - prevCountB;
-
-  // Calculate RPM
-  float rpmB = (countDiffB / countsPerRotation) / timeDiffMinutesB;
-
-  // Update previous values for next calculation
-  prevTimeB = currentTime;
-  prevCountB = currentCountB;
-
-  return static_cast<int>(rpmB);
+int calculateRPMB() {
+  return calculateRPM(prevTimeB, prevCountB, countB);
 }
 
 // Function to calculate the angle of rotation for Motor A
