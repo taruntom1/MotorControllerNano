@@ -2,7 +2,7 @@
 #include <QuickPID.h>
 
 // #define DEBUG
-//#define BENCHMARK
+#define BENCHMARK
 
 // #define ARDUINO_NANO
 #define nodeMCU
@@ -54,6 +54,7 @@
   const int motorB_PWM = 15;
 // Pin where the PPM signal is connected
 #define PPM_PIN 13
+#define PWM_FREQ 20000
 #endif
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -481,6 +482,9 @@ void setup()
   // Set motor control pins as outputs for Motor B
   pinMode(motorB_DIR, OUTPUT);
   pinMode(motorB_PWM, OUTPUT);
+
+  // Set PWM frequency
+  analogWriteFreq(PWM_FREQ);
 
   // Set up the PPM input pin
   pinMode(PPM_PIN, INPUT);
