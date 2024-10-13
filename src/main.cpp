@@ -2,7 +2,7 @@
 #include <QuickPID.h>
 
 // #define DEBUG
-// #define BENCHMARK
+#define BENCHMARK
 
 // #define ARDUINO_NANO
 #define nodeMCU
@@ -152,48 +152,53 @@ QuickPID motorSpeedPIDB(&speed2, &output2, &targetSpeed1, KpB2, KiB2, KdB1, /* O
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////PPM Reading//////////////////////////////////////////////////////////
 // Pin where the PPM signal is connected
-const int PPM_PIN = 13;
+#define PPM_PIN 13
+#define SYNC_GAP 3000 // Adjust as per sync gap width in microseconds
+#define NUM_CHANNELS 8
+#define READ_INTERVAL 100000 // 100 ms in microseconds
 
-// Number of PPM channels
-const int NUM_CHANNELS = 8;
-
-// Array to store pulse width (in microseconds) for each channel
-volatile int ppmChannels[NUM_CHANNELS] = {0};
-
-// Variable to track current channel
-volatile int currentChannel = 0;
-
-// Variable to store the last pulse time
 volatile unsigned long lastPulseTime = 0;
+volatile unsigned long lastReadTime = 0; // Time when last data was read
+volatile int currentChannel = 0;
+volatile bool readyToRead = false;
 
-// Time threshold for frame sync pulse (in microseconds)
-const int SYNC_GAP = 3000; // 3ms gap considered as sync
+unsigned long ppmChannels[NUM_CHANNELS];
 
-// Interrupt Service Routine (ISR) to handle the PPM signal
+// ISR to handle PPM signal
 IRAM_ATTR void ppmISR()
 {
-  // Measure the time since the last pulse
+  unsigned long currentTime = micros();
+  unsigned long pulseWidth = currentTime - lastPulseTime;
+  lastPulseTime = currentTime;
 
-  unsigned long currenttime = micros();
-  unsigned long pulseWidth = currenttime - lastPulseTime;
-  lastPulseTime = currenttime;
+  // Check if 100ms has passed since the last data read
+  if ((currentTime - lastReadTime) < READ_INTERVAL)
+  {
+    return; // Exit if 100ms hasn't passed
+  }
 
   // Check if the pulse width indicates a sync pulse
   if (pulseWidth >= SYNC_GAP)
   {
     // Sync pulse detected, reset to the first channel
     currentChannel = 0;
+    readyToRead = true;
   }
-  else
+  else if (readyToRead && currentChannel < NUM_CHANNELS)
   {
-    // If valid channel, store the pulse width
-    if (currentChannel < NUM_CHANNELS)
+    // Store the pulse width if within the allowed channel range
+    ppmChannels[currentChannel] = pulseWidth;
+    currentChannel++;
+
+    // If all channels have been read, mark the time and stop reading
+    if (currentChannel >= NUM_CHANNELS)
     {
-      ppmChannels[currentChannel] = pulseWidth;
-      currentChannel++;
+      lastReadTime = currentTime;
+      readyToRead = false; // Wait for the next sync pulse
     }
   }
 }
+
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 // Function declarations
@@ -922,7 +927,7 @@ void setPIDTunings(float val, float &Kp, float &Ki, float &Kd, QuickPID &pid, u8
 
   if (updated)
   {
-    pid.SetTunings(Kp, Ki, Kd);  // Only update PID tunings if any value changes
+    pid.SetTunings(Kp, Ki, Kd); // Only update PID tunings if any value changes
   }
 }
 
@@ -932,18 +937,22 @@ void ppm_pid_tuner()
   u8 control1 = 0;
   if (ppmChannels[4] >= 1150)
   {
-    if (ppmChannels[4] < 1310) control1 = 1;
-    else if (ppmChannels[4] < 1480) control1 = 2;
-    else if (ppmChannels[4] < 1650) control1 = 3;
-    else if (ppmChannels[4] < 1820) control1 = 4;
-    else control1 = 5;
+    if (ppmChannels[4] < 1310)
+      control1 = 1;
+    else if (ppmChannels[4] < 1480)
+      control1 = 2;
+    else if (ppmChannels[4] < 1650)
+      control1 = 3;
+    else if (ppmChannels[4] < 1820)
+      control1 = 4;
+    else
+      control1 = 5;
   }
 
   // Determine control2 based on ppmChannels[5]
   u8 control2 = (ppmChannels[5] < 1300) ? 0 : ((ppmChannels[5] < 1600) ? 1 : 2);
 
-
-  float val = (ppmChannels[2] - 1000) * 0.001;  // Scale 'val' between 0 and 1
+  float val = (ppmChannels[2] - 1000) * 0.001; // Scale 'val' between 0 and 1
 
   switch (control1)
   {
@@ -982,4 +991,3 @@ void ppm_pid_tuner()
     break;
   }
 }
-
