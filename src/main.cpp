@@ -1,6 +1,6 @@
 #include <Arduino.h>
 #include <QuickPID.h>
-
+#include "Motor.h"  
 // #define DEBUG
 //#define BENCHMARK
 
@@ -68,6 +68,9 @@
 #define PWM_FREQ 1000
 #endif
 
+//Counts per revolution for the encoders
+const int countsPerRev = 375;
+
 ///////////////////////////////////////////////////////////////////////////////////////////////
 
 // Constants for PWM limit
@@ -81,15 +84,6 @@ uint8_t pwmOffsetB = 0; // PWM value for Motor B
 volatile long countA = 0; // Encoder count for Motor A
 volatile long countB = 0; // Encoder count for Motor B
 
-// Constants for encoder and motor calculations
-const float countsPerRotation = 375.0; // 500 encoder counts per motor rotation
-
-// Previous values for RPM calculation
-unsigned long prevTimeA = 0; // Previous timestamp for Motor A
-long prevCountA = 0;         // Previous encoder count for Motor A
-unsigned long prevTimeB = 0; // Previous timestamp for Motor B
-long prevCountB = 0;         // Previous encoder count for Motor B
-
 // Timing variables for running PID at a set interval (100 times per second)
 unsigned long lastUpdateTime = 0;
 const int interval = 10000; // Time interval in microseconds (1000ms/100 = 10ms)
@@ -97,6 +91,7 @@ const int interval = 10000; // Time interval in microseconds (1000ms/100 = 10ms)
 // Timing variables for running ppm tuning at a set interval (5 times per second)
 unsigned long lastUpdateTimePPM = 0;
 const int intervalPPM = 200000; // Time interval in microseconds (1000ms/5 = 200ms)
+
 // PID Controller Mode
 bool mode; // Mode for PID controller mode 0 for angle PID and 1 for speed PID
 // PID enable
@@ -112,6 +107,10 @@ u_int8_t modePrint = 0; // 0 for none, 1 for angle PIDA, 2 for angle PIDB etc
 
 float output1 = 0; // Output for Motor A
 float output2 = 0; // Output for Motor B
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////INITIALISING MOTOR/////////////////////////////////////////////////
+Motor motorA(motorA_DIR, motorA_PWM, countA, countsPerRev, pwmOffsetA);
+Motor motorB(motorB_DIR, motorB_PWM, countB, countsPerRev, pwmOffsetB);
 /////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////Angle PID//////////////////////////////////////////////////////
 
@@ -222,13 +221,6 @@ IRAM_ATTR void manageCountA(); // ISR for Encoder A
 IRAM_ATTR void manageCountB(); // ISR for Encoder B
 #endif
 
-int calculateRPMA();                               // Function to calculate RPM for Motor A
-int calculateRPMB();                               // Function to calculate RPM for Motor B
-double calculateAngleA();                          // Function to calculate the angle of rotation for Motor A
-double calculateAngleB();                          // Function to calculate the angle of rotation for Motor B
-void controlMotorA(double speed);                  // Function to control Motor A speed and direction
-void controlMotorB(double speed);                  // Function to control Motor B speed and direction
-void controlMotor(double speed, int IN1, int PWM); // General function to control any motor based on speed (negative for reverse, positive for forward)
 void ppm_pid_tuner();                              // Function to control PID tuners using RF remote
 void PrintPIDValues();                             // Function to print PID input, target, output values to Serial Monitor for tuning
 /////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -256,9 +248,6 @@ void resetCommand()
   index1 = 0;
 }
 
-// Function to run the appropriate command based on serial input
-
-
 // Helper function to parse and set PID values
 void updatePID(float &Kp, float &Ki, float &Kd, char *input) {
     int pid_args[3] = {0}; // Holds parsed PID values
@@ -274,6 +263,7 @@ void updatePID(float &Kp, float &Ki, float &Kd, char *input) {
     Kd = pid_args[2];
 }
 
+// Function to run the appropriate command based on serial input
 void runCommand() {
     int arg1 = atoi(argv1); // Convert argv1 to integer
     int arg2 = atoi(argv2); // Convert argv2 to integer
@@ -303,8 +293,8 @@ void runCommand() {
         break;
 
     case READ_SPEEDS:
-        Serial.print(calculateRPMA()); Serial.print(" ");
-        Serial.println(calculateRPMB()); // Respond with RPM of both motors
+        Serial.print(motorA.calculateRPM()); Serial.print(" ");
+        Serial.println(motorB.calculateRPM()); // Respond with RPM of both motors
         break;
 
     case RESET_ENCODERS:
@@ -336,8 +326,8 @@ void runCommand() {
         countB = 0;
         pidEnable = true;
         mode = 0; // Set mode flag to angle
-        targetAngle1 = calculateAngleA() + arg1;
-        targetAngle2 = calculateAngleB() + arg2;
+        targetAngle1 = arg1;
+        targetAngle2 = arg2;
         #ifdef DEBUG
             Serial.print("Target Angle 1: "); Serial.println(targetAngle1);
             Serial.print("Target Angle 2: "); Serial.println(targetAngle2);
@@ -350,7 +340,7 @@ void runCommand() {
         motorAnglePIDA.SetMode(motorAnglePIDA.Control::manual);  // Angle PID to auto
         motorAnglePIDB.SetMode(motorAnglePIDB.Control::manual);
         pidEnable = false;
-        controlMotorA(arg1); controlMotorB(arg2); // Set PWM values
+        motorA.controlMotor(arg1); motorB.controlMotor(arg2); // Set PWM values
         break;
 
     case UPDATE_PIDAA:
@@ -494,13 +484,6 @@ void setup()
   // Initialize serial communication
   Serial.begin(115200);
 
-  // Set motor control pins as outputs for Motor A
-  pinMode(motorA_DIR, OUTPUT);
-  pinMode(motorA_PWM, OUTPUT);
-
-  // Set motor control pins as outputs for Motor B
-  pinMode(motorB_DIR, OUTPUT);
-  pinMode(motorB_PWM, OUTPUT);
 
   // Set PWM frequency
   //analogWriteFreq(PWM_FREQ);
@@ -579,25 +562,25 @@ void runPIDControl()
 {
   if (mode == 0) // Angle PID mode
   {
-    angle1 = calculateAngleA(); // Calculate angle for Motor A
+    angle1 = motorA.calculateAngle(); // Calculate angle for Motor A
     motorAnglePIDA.Compute();
 
-    angle2 = calculateAngleB(); // Calculate angle for Motor B
+    angle2 = motorB.calculateAngle(); // Calculate angle for Motor B
     motorAnglePIDB.Compute();
 
-    controlMotorA(output1);
-    controlMotorB(output2);
+    motorA.controlMotor(output1);
+    motorB.controlMotor(output2);
   }
   else if (mode == 1) // Speed PID mode
   {
-    speed1 = calculateRPMA(); // Calculate RPM for Motor A
+    speed1 = motorA.calculateRPM(); // Calculate RPM for Motor A
     motorSpeedPIDA.Compute();
 
-    speed2 = calculateRPMB(); // Calculate RPM for Motor B
+    speed2 = motorB.calculateRPM();  // Calculate RPM for Motor B
     motorSpeedPIDB.Compute();
 
-    controlMotorA(output1);
-    controlMotorB(output2);
+    motorA.controlMotor(output1);
+    motorB.controlMotor(output2);
   }
 }
 
@@ -716,123 +699,6 @@ IRAM_ATTR void manageCountB()
 
 #endif
 
-// Define constant for time conversion to avoid using floating-point division early
-const unsigned long millisToMinutes = 60000; // Keep as integer
-
-// General function to calculate RPM for any motor
-const int bufferSize = 5;   // Number of values for the running average
-int rpmBuffer[bufferSize] = {0};  // Array to store the last 5 RPM values
-int bufferIndex = 0;        // Index for the next value in the buffer
-int sumRPM = 0;             // Sum of the values in the buffer
-
-// General function to calculate RPM for any motor with running average of last 5 values
-int calculateRPM(unsigned long &prevTime, long &prevCount, volatile long currentCount)
-{
-  unsigned long currentTime = millis(); // Get current time in milliseconds
-
-  // Calculate time difference in milliseconds (integer math)
-  unsigned long timeDiffMillis = currentTime - prevTime;
-
-  // Calculate the change in encoder count
-  long countDiff = currentCount - prevCount;
-
-  // Avoid division by zero by checking for very small time differences
-  if (timeDiffMillis == 0)
-  {
-    return 0;
-  }
-
-  // Calculate RPM using integer math where possible, then convert to float only for final division
-  float timeDiffMinutes = timeDiffMillis / static_cast<float>(millisToMinutes);
-  float rpm = (countDiff / static_cast<float>(countsPerRotation)) / timeDiffMinutes;
-
-  // Update previous values for next calculation
-  prevTime = currentTime;
-  prevCount = currentCount;
-
-  // Calculate running average of the last 5 RPM values
-  sumRPM -= rpmBuffer[bufferIndex];    // Subtract the old value from the sum
-  rpmBuffer[bufferIndex] = static_cast<int>(rpm); // Store the new RPM value
-  sumRPM += rpmBuffer[bufferIndex];    // Add the new value to the sum
-
-  bufferIndex = (bufferIndex + 1) % bufferSize;   // Move to the next buffer position
-
-  // Return the average of the last 5 RPM values
-  return sumRPM / bufferSize;
-}
-
-
-// Function to calculate RPM for Motor A
-int calculateRPMA()
-{
-  return calculateRPM(prevTimeA, prevCountA, countA);
-}
-
-// Function to calculate RPM for Motor B
-int calculateRPMB()
-{
-  return calculateRPM(prevTimeB, prevCountB, countB);
-}
-
-// Function to calculate the angle of rotation for Motor A
-double calculateAngleA()
-{
-  // Calculate angle in degrees (360 degrees per full rotation)
-  return (countA) * 360 / 375;
-}
-
-// Function to calculate the angle of rotation for Motor B
-double calculateAngleB()
-{
-  // Calculate angle in degrees (360 degrees per full rotation)
-  return ((countB) * 360 / 375);
-}
-
-// Function to control Motor A speed and direction
-void controlMotorA(double speed)
-{
-  if (speed > 0)
-  {
-    // Forward direction
-    digitalWrite(motorA_DIR, HIGH);
-    analogWrite(motorA_PWM, speed + pwmOffsetA); // Set speed (0-255)
-  }
-  else if (speed < 0)
-  {
-    // Reverse direction
-    digitalWrite(motorA_DIR, LOW);
-    analogWrite(motorA_PWM, -speed + pwmOffsetA); // Set speed (0-255), negate for reverse
-  }
-  else
-  {
-    // Stop the motor
-    digitalWrite(motorA_DIR, LOW);
-    analogWrite(motorA_PWM, 0);
-  }
-}
-
-// Function to control Motor B speed and direction
-void controlMotorB(double speed)
-{
-  if (speed > 0)
-  {
-    // Forward direction
-    digitalWrite(motorB_DIR, HIGH);
-    analogWrite(motorB_PWM, speed + pwmOffsetB); // Set speed (0-255)
-  }
-  else if (speed < 0)
-  {
-    // Reverse direction
-    digitalWrite(motorB_DIR, LOW);
-    analogWrite(motorB_PWM, -speed + pwmOffsetB); // Set speed (0-255), negate for reverse
-  }
-  else
-  {
-    // Stop the motor
-    digitalWrite(motorB_DIR, LOW);
-    analogWrite(motorB_PWM, 0);
-  }
-}
 
 void PrintPIDValues()
 {
@@ -859,7 +725,7 @@ void PrintPIDValues()
     break;
 
   case 3:
-    Serial.print(calculateRPMA());
+    Serial.print(motorA.calculateRPM());
     Serial.print(" ");
     Serial.print(targetSpeed1);
     Serial.print(" ");
@@ -867,7 +733,7 @@ void PrintPIDValues()
     break;
 
   case 4:
-    Serial.print(calculateRPMB());
+    Serial.print(motorB.calculateRPM());
     Serial.print(" ");
     Serial.print(targetSpeed2);
     Serial.print(" ");
@@ -951,12 +817,12 @@ void ppm_pid_tuner()
     // Set direct outputs based on control2
     if (control2 == 0)
     {
-      controlMotorA((int)(val * 255));
+      motorA.controlMotor((int)(val * 255));
       //Serial.println(output1);
     }
     else if (control2 == 1)
     {
-      controlMotorB((int)(val * 255));
+      motorB.controlMotor((int)(val * 255));
       //Serial.println(output2);
     }
     break;
