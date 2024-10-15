@@ -2,7 +2,7 @@
 #include <QuickPID.h>
 
 // #define DEBUG
-#define BENCHMARK
+//#define BENCHMARK
 
 // #define ARDUINO_NANO
 #define nodeMCU
@@ -21,11 +21,11 @@
 #define UPDATE_PIDAB 'v'        // Update angle PID values for Motor B (Kp, Ki, Kd) eg: v 10:20:30
 #define UPDATE_PIDSA 'w'        // Update speed PID values for Motor A (Kp, Ki, Kd) eg: w 10:20:30
 #define UPDATE_PIDSB 'x'        // Update speed PID values for Motor B (Kp, Ki, Kd) eg: x 10:20:30
-#define GET_INP_TAR 'g'         // prints target and input values for specified pid eg: g 1 , g 0 for disabling the printing
+#define GET_INP_TAR 'g'         // prints target and input values for specified pid eg: g 1 , g 0 for disabling the printing, 1 -angle motor 1, 2 - angle motor 2, 3 - speed motor 1, 4 - speed motor 2
 #define PRINT_PPM 'z'           // print PPM signal
 #define PPM_INTRRUPT 'i'        // enable/disable ppm interrupt
-#define PPM_TUNE 't'            // set the ppm output pin
-#define PRINT_PID_CONST 'k'     // ppm output pin
+#define PPM_TUNE 't'            // For enabling tuning with ppm (RC transmitter and receiver))
+#define PRINT_PID_CONST 'k'     // for printing pid constants
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 // Pin definitions
@@ -40,21 +40,32 @@
   const int motorA_PWM = 6;
   const int motorB_DIR = 8;
   const int motorB_PWM = 9;
+
+
+  #define encoderPinA1 5
+  #define encoderPinA2 16
+  #define encoderPinB1 4
+  #define encoderPinB2 14
+  const int motorA_DIR = 0;
+  const int motorA_PWM = 2;
+  const int motorB_DIR = 15;
+  const int motorB_PWM = 12;
 #endif
 
 #ifdef nodeMCU
   // NodeMCU pin definitions for Encoders and Motors
-  #define encoderPinA1 5
-  #define encoderPinA2 4
+  #define encoderPinA1 13
+  #define encoderPinA2 12
   #define encoderPinB1 14
-  #define encoderPinB2 12
-  const int motorA_DIR = 0;
-  const int motorA_PWM = 2;
-  const int motorB_DIR = 16;
-  const int motorB_PWM = 15;
+  #define encoderPinB2 27
+  const int motorA_DIR = 26;
+  const int motorA_PWM = 25;
+  const int motorB_DIR = 33;
+  const int motorB_PWM = 32;
 // Pin where the PPM signal is connected
-#define PPM_PIN 13
-#define PWM_FREQ 20000
+#define PPM_PIN 18
+// PWM signal frequency, preferably use something not in audible range
+#define PWM_FREQ 1000
 #endif
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -79,16 +90,17 @@ long prevCountA = 0;         // Previous encoder count for Motor A
 unsigned long prevTimeB = 0; // Previous timestamp for Motor B
 long prevCountB = 0;         // Previous encoder count for Motor B
 
-// Timing variables for running PID at a set interval (30 times per second)
+// Timing variables for running PID at a set interval (100 times per second)
 unsigned long lastUpdateTime = 0;
-const int interval = 10000; // Time interval in microseconds (1000ms/30 = ~33ms)
+const int interval = 10000; // Time interval in microseconds (1000ms/100 = 10ms)
 
 // Timing variables for running ppm tuning at a set interval (5 times per second)
 unsigned long lastUpdateTimePPM = 0;
 const int intervalPPM = 200000; // Time interval in microseconds (1000ms/5 = 200ms)
 // PID Controller Mode
 bool mode; // Mode for PID controller mode 0 for angle PID and 1 for speed PID
-
+// PID enable
+bool pidEnable = false; // Enable PID controller
 // PPM print mode
 bool ppmPrint = 0;     // Print PPM signal to serial monitor when true
 bool ppminterrupt = 0; // Turns on or off ppm interrupt
@@ -96,7 +108,7 @@ bool ppminterrupt = 0; // Turns on or off ppm interrupt
 bool ppmTuner = 0; // Turns on or off ppm tuner
 
 // Mode select for printing feedback and target values
-u8 modePrint = 0; // 0 for none, 1 for angle PIDA, 2 for angle PIDB etc
+u_int8_t modePrint = 0; // 0 for none, 1 for angle PIDA, 2 for angle PIDB etc
 
 float output1 = 0; // Output for Motor A
 float output2 = 0; // Output for Motor B
@@ -110,9 +122,9 @@ float angle2 = 0;       // Angle of rotation for Motor B
 float targetAngle2 = 0; // Target angle for Motor B
 
 // PID constants for motor 1
-float KpA1 = 0.7, KiA1 = 0.1, KdA1 = 0.1;
+float KpA1 = 1.51, KiA1 = 0.1, KdA1 = 0.1;
 // PID constants for motor 2
-float KpA2 = 0.7, KiA2 = 0.1, KdA2 = 0.1;
+float KpA2 = 1.51, KiA2 = 0.1, KdA2 = 0.1;
 
 // PID Controller Object
 QuickPID motorAnglePIDA(&angle1, &output1, &targetAngle1, KpA1, KiA1, KdA1, /* OPTIONS */
@@ -136,9 +148,9 @@ float speed2 = 0;       // Speed of Motor B
 float targetSpeed2 = 0; // Target speed for Motor B
 
 // PID constants for motor 1
-float KpB1 = 1.0, KiB1 = 0.5, KdB1 = 0.1;
+float KpB1 = 1.0, KiB1 = 0.1, KdB1 = 0.0;
 // PID constants for motor 2
-float KpB2 = 1.0, KiB2 = 0.5, KdB2 = 0.1;
+float KpB2 = 1.0, KiB2 = 0.1, KdB2 = 0.0;
 
 QuickPID motorSpeedPIDA(&speed1, &output1, &targetSpeed1, KpB1, KiB1, KdB1, /* OPTIONS */
                         motorSpeedPIDA.pMode::pOnError,
@@ -305,8 +317,8 @@ void runCommand() {
         motorAnglePIDB.SetMode(motorAnglePIDB.Control::manual);
         motorSpeedPIDA.SetMode(motorSpeedPIDA.Control::timer);  // Speed PID to auto
         motorSpeedPIDB.SetMode(motorSpeedPIDB.Control::timer);
-
-        mode = 1; // Set mode flag to manual
+        pidEnable = true;
+        mode = 1; 
         targetSpeed1 = arg1;
         targetSpeed2 = arg2;
         #ifdef DEBUG
@@ -320,7 +332,9 @@ void runCommand() {
         motorSpeedPIDB.SetMode(motorSpeedPIDB.Control::manual);
         motorAnglePIDA.SetMode(motorAnglePIDA.Control::timer);  // Angle PID to auto
         motorAnglePIDB.SetMode(motorAnglePIDB.Control::timer);
-
+        countA = 0;
+        countB = 0;
+        pidEnable = true;
         mode = 0; // Set mode flag to angle
         targetAngle1 = calculateAngleA() + arg1;
         targetAngle2 = calculateAngleB() + arg2;
@@ -331,6 +345,11 @@ void runCommand() {
         break;
 
     case MOTOR_PWM:
+        motorSpeedPIDA.SetMode(motorSpeedPIDA.Control::manual); // Speed PID to manual
+        motorSpeedPIDB.SetMode(motorSpeedPIDB.Control::manual);
+        motorAnglePIDA.SetMode(motorAnglePIDA.Control::manual);  // Angle PID to auto
+        motorAnglePIDB.SetMode(motorAnglePIDB.Control::manual);
+        pidEnable = false;
         controlMotorA(arg1); controlMotorB(arg2); // Set PWM values
         break;
 
@@ -484,7 +503,7 @@ void setup()
   pinMode(motorB_PWM, OUTPUT);
 
   // Set PWM frequency
-  analogWriteFreq(PWM_FREQ);
+  //analogWriteFreq(PWM_FREQ);
 
   // Set up the PPM input pin
   pinMode(PPM_PIN, INPUT);
@@ -500,8 +519,8 @@ void setup()
   motorSpeedPIDB.SetSampleTimeUs(interval);                            // Set PID update interval
   motorSpeedPIDB.SetOutputLimits(-PWM_MAX + pwmOffsetB, PWM_MAX - pwmOffsetB); // Set output range
 
-  motorAnglePIDA.SetMode(motorAnglePIDA.Control::timer);  // Set PID mode to automatic
-  motorAnglePIDB.SetMode(motorAnglePIDB.Control::timer);  // Set PID mode to automatic
+  motorAnglePIDA.SetMode(motorAnglePIDA.Control::manual);  // Set PID mode to automatic
+  motorAnglePIDB.SetMode(motorAnglePIDB.Control::manual);  // Set PID mode to automatic
   motorSpeedPIDA.SetMode(motorSpeedPIDA.Control::manual); // Set PID mode to manual
   motorSpeedPIDB.SetMode(motorSpeedPIDB.Control::manual); // Set PID mode to manual
 }
@@ -523,7 +542,9 @@ void loop()
     lastUpdateTime = currentTime;
 
     // Handle PID control (either angle or speed mode)
-    runPIDControl();
+    if (pidEnable){
+      runPIDControl();
+    }
 
     // Optionally print PID values for tuning
     if (modePrint != 0)
@@ -699,6 +720,12 @@ IRAM_ATTR void manageCountB()
 const unsigned long millisToMinutes = 60000; // Keep as integer
 
 // General function to calculate RPM for any motor
+const int bufferSize = 5;   // Number of values for the running average
+int rpmBuffer[bufferSize] = {0};  // Array to store the last 5 RPM values
+int bufferIndex = 0;        // Index for the next value in the buffer
+int sumRPM = 0;             // Sum of the values in the buffer
+
+// General function to calculate RPM for any motor with running average of last 5 values
 int calculateRPM(unsigned long &prevTime, long &prevCount, volatile long currentCount)
 {
   unsigned long currentTime = millis(); // Get current time in milliseconds
@@ -723,8 +750,17 @@ int calculateRPM(unsigned long &prevTime, long &prevCount, volatile long current
   prevTime = currentTime;
   prevCount = currentCount;
 
-  return static_cast<int>(rpm); // Return the integer value of the RPM
+  // Calculate running average of the last 5 RPM values
+  sumRPM -= rpmBuffer[bufferIndex];    // Subtract the old value from the sum
+  rpmBuffer[bufferIndex] = static_cast<int>(rpm); // Store the new RPM value
+  sumRPM += rpmBuffer[bufferIndex];    // Add the new value to the sum
+
+  bufferIndex = (bufferIndex + 1) % bufferSize;   // Move to the next buffer position
+
+  // Return the average of the last 5 RPM values
+  return sumRPM / bufferSize;
 }
+
 
 // Function to calculate RPM for Motor A
 int calculateRPMA()
@@ -823,7 +859,7 @@ void PrintPIDValues()
     break;
 
   case 3:
-    Serial.print(speed1);
+    Serial.print(calculateRPMA());
     Serial.print(" ");
     Serial.print(targetSpeed1);
     Serial.print(" ");
@@ -831,7 +867,7 @@ void PrintPIDValues()
     break;
 
   case 4:
-    Serial.print(speed2);
+    Serial.print(calculateRPMB());
     Serial.print(" ");
     Serial.print(targetSpeed2);
     Serial.print(" ");
@@ -842,7 +878,7 @@ void PrintPIDValues()
   }
 }
 
-void setPIDTunings(float val, float &Kp, float &Ki, float &Kd, QuickPID &pid, u8 control2)
+void setPIDTunings(float val, float &Kp, float &Ki, float &Kd, QuickPID &pid, u_int8_t control2)
 {
   bool updated = false;
 
@@ -871,7 +907,7 @@ void setPIDTunings(float val, float &Kp, float &Ki, float &Kd, QuickPID &pid, u8
 void ppm_pid_tuner()
 {
   // Determine control1 based on ppmChannels[4]
-  u8 control1 = 0;
+  u_int8_t control1 = 0;
   if (ppmChannels[4] >= 1150)
   {
     if (ppmChannels[4] < 1310)
@@ -887,9 +923,9 @@ void ppm_pid_tuner()
   }
 
   // Determine control2 based on ppmChannels[5]
-  u8 control2 = (ppmChannels[5] < 1300) ? 0 : ((ppmChannels[5] < 1600) ? 1 : 2);
+  u_int8_t control2 = (ppmChannels[5] < 1300) ? 0 : ((ppmChannels[5] < 1600) ? 1 : 2);
 
-  float val = (ppmChannels[2] - 1000) * 0.001; // Scale 'val' between 0 and 1
+  float val = (ppmChannels[2] - 1000) * 0.003; // Scale 'val' between 0 and 1
 
   switch (control1)
   {
@@ -915,13 +951,13 @@ void ppm_pid_tuner()
     // Set direct outputs based on control2
     if (control2 == 0)
     {
-      output1 = (int)(val * 255);
-      Serial.println(output1);
+      controlMotorA((int)(val * 255));
+      //Serial.println(output1);
     }
     else if (control2 == 1)
     {
-      output2 = (int)(val * 255);
-      Serial.println(output2);
+      controlMotorB((int)(val * 255));
+      //Serial.println(output2);
     }
     break;
   default:
