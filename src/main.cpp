@@ -44,7 +44,7 @@ const int motorB_PWM = 9;
 #endif
 
 #ifdef nodeMCU
-#define encoderPinA1 5
+/* #define encoderPinA1 5
 #define encoderPinA2 16
 #define encoderPinB1 4
 #define encoderPinB2 14
@@ -52,8 +52,8 @@ const int motorA_DIR = 0;
 const int motorA_PWM = 2;
 const int motorB_DIR = 15;
 const int motorB_PWM = 12;
-#define PPM_PIN 13
-/*   // NodeMCU pin definitions for Encoders and Motors
+#define PPM_PIN 13 */
+  // NodeMCU pin definitions for Encoders and Motors
   #define encoderPinA1 13
   #define encoderPinA2 12
   #define encoderPinB1 14
@@ -63,7 +63,7 @@ const int motorB_PWM = 12;
   const int motorB_DIR = 33;
   const int motorB_PWM = 32;
 // Pin where the PPM signal is connected
-#define PPM_PIN 18 */
+#define PPM_PIN 18
 // PWM signal frequency, preferably use something not in audible range
 #define PWM_FREQ 1000
 #endif
@@ -372,7 +372,7 @@ void runCommand()
 
   case UPDATE_PIDAB:
     updatePID(KpA2, KiA2, KdA2, p); // Update PID for Motor B angle
-    motorSpeedPIDB.SetTunings(KpA2, KiA2, KdA2);
+    motorAnglePIDB.SetTunings(KpA2, KiA2, KdA2);
 #ifdef DEBUG
     Serial.print("PID B updated: Kp=");
     Serial.print(KpA2);
@@ -845,31 +845,31 @@ void ppm_pid_tuner()
   {
   case 0:
     setPIDTunings(val, KpA1, KiA1, KdA1, motorAnglePIDA, control2);
-    if (ppmChannels[6] > 1500)
-    {
-      targetAngle1 = ppmChannels[3] - 1000;
-    }
+    // if (ppmChannels[6] > 1500)
+    // {
+    //   targetAngle1 = ppmChannels[3] - 1000;
+    // }
     break;
   case 1:
     setPIDTunings(val, KpA2, KiA2, KdA2, motorAnglePIDB, control2);
-    if (ppmChannels[6] > 1500)
-    {
-      targetAngle2 = ppmChannels[3] - 1000;
-    }
+    // if (ppmChannels[6] > 1500)
+    // {
+    //   targetAngle2 = ppmChannels[3] - 1000;
+    // }
     break;
   case 2:
     setPIDTunings(val, KpB1, KiB1, KdB1, motorSpeedPIDA, control2);
-    if (ppmChannels[6] > 1500)
-    {
-      targetSpeed1 = ppmChannels[3] - 1000;
-    }
+    // if (ppmChannels[6] > 1500)
+    // {
+    //   targetSpeed1 = ppmChannels[3] - 1000;
+    // }
     break;
   case 3:
     setPIDTunings(val, KpB2, KiB2, KdB2, motorSpeedPIDB, control2);
-    if (ppmChannels[6] > 1500)
-    {
-      targetSpeed2 = ppmChannels[3] - 1000;
-    }
+    // if (ppmChannels[6] > 1500)
+    // {
+    //   targetSpeed2 = ppmChannels[3] - 1000;
+    // }
     break;
   case 4:
     // Disable all PID controllers
