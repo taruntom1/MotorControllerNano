@@ -14,10 +14,7 @@ class Motor
     long prevCount;              // Previous encoder count for RPM calculation
     const int countsPerRotation; // Encoder counts per full rotation
     const unsigned long millisToMinutes = 60000; // Milliseconds to minutes for RPM calculation
-    const int bufferSize = 5;    // Number of values for the running average
-    int rpmBuffer[5];            // Array to store the last 5 RPM values
-    int bufferIndex = 0;         // Index for the next value in the buffer
-    int sumRPM = 0;              // Sum of the values in the buffer
+    int filteredRPM;             // Filtered RPM value
 
   public:
     // Constructor

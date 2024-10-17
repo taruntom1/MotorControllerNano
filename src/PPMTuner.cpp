@@ -146,4 +146,4 @@ void ppm_pid_tuner()
         break;
     }
 }
-#ifdef ENABLE_PPM
+#endif

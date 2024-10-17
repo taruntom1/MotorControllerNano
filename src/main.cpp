@@ -282,7 +282,7 @@ void runCommand()
   case MOTOR_SPEEDS:
     motorAnglePIDA.SetMode(motorAnglePIDA.Control::manual); // Angle PID to manual
     motorAnglePIDB.SetMode(motorAnglePIDB.Control::manual);
-    motorSpeedPIDA.SetMode(motorSpeedPIDA.Control::automatic); // Speed PID to auto
+    motorSpeedPIDA.SetMode(motorSpeedPIDA.Control::timer); // Speed PID to auto
     motorSpeedPIDB.SetMode(motorSpeedPIDB.Control::timer);
     pidEnable = true;
     mode = 1;

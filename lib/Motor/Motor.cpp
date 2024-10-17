@@ -8,7 +8,6 @@ Motor::Motor(int directionPin, int pwmPin, volatile long &encCount, int countsPe
   pinMode(pwmPin, OUTPUT);
   prevTime = millis();  // Initialize previous time
   prevCount = encoderCount;  // Initialize previous encoder count
-  memset(rpmBuffer, 0, sizeof(rpmBuffer));  // Clear the RPM buffer
 }
 
 // Function to control Motor speed and direction
@@ -46,33 +45,31 @@ int Motor::calculateRPM()
 {
   unsigned long currentTime = millis(); // Get current time in milliseconds
 
-  // Calculate time difference in milliseconds (integer math)
+  // Calculate time difference in milliseconds
   unsigned long timeDiffMillis = currentTime - prevTime;
 
   // Calculate the change in encoder count
   long countDiff = encoderCount - prevCount;
 
-  // Avoid division by zero by checking for very small time differences
+  // Avoid division by zero by returning the previous filtered RPM value
   if (timeDiffMillis == 0)
   {
-    return 0;
+    return filteredRPM; // Return the previously filtered RPM value
   }
 
-  // Calculate RPM using integer math where possible, then convert to float only for final division
-  float timeDiffMinutes = timeDiffMillis / static_cast<float>(millisToMinutes);
-  float rpm = (countDiff / static_cast<float>(countsPerRotation)) / timeDiffMinutes;
+  // Avoid floating-point math by working with integer math
+  // Calculate RPM directly using integer math: (countDiff * 60000) / (countsPerRevolution * timeDiffMillis)
+  long rpm = (countDiff * 60000L) / (countsPerRotation * timeDiffMillis);
 
-  // Update previous values for next calculation
+  // Apply low-pass filter using exponential moving average
+  // alpha is the smoothing factor (0 < alpha < 1), here we use 0.1 as an example
+  float alpha = 0.1;
+  filteredRPM = (alpha * rpm) + ((1 - alpha) * filteredRPM);
+
+  // Update previous time and encoder count for next calculation
   prevTime = currentTime;
   prevCount = encoderCount;
 
-  // Calculate running average of the last 5 RPM values
-  sumRPM -= rpmBuffer[bufferIndex];          // Subtract the old value from the sum
-  rpmBuffer[bufferIndex] = static_cast<int>(rpm); // Store the new RPM value
-  sumRPM += rpmBuffer[bufferIndex];          // Add the new value to the sum
-
-  bufferIndex = (bufferIndex + 1) % bufferSize; // Move to the next buffer position
-
-  // Return the average of the last 5 RPM values
-  return sumRPM / bufferSize;
+  return filteredRPM;
 }
+
