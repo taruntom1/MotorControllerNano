@@ -1,15 +1,14 @@
 #include <Arduino.h>
 #include <QuickPID.h>
 #include "Motor.h"
-#include <stdio.h>
-#include <stdlib.h>
+#include "PPMTuner.h"
 
 //#define DEBUG
 // #define BENCHMARK
-// #define ENABLE_PPM
+#define ENABLE_PPM
 
-#define ARDUINO_NANO
-// #define nodeMCU
+//#define ARDUINO_NANO
+#define nodeMCU
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////Serial Control Commands////////////////////////////////////////////
 // Define command characters for various actions
@@ -44,11 +43,11 @@ const int motorA_DIR = 7;
 const int motorA_PWM = 6;
 const int motorB_DIR = 8;
 const int motorB_PWM = 9;
-
+#define PPM_PIN 18
 #endif
 
 #ifdef nodeMCU
-/* #define encoderPinA1 5
+#define encoderPinA1 5
 #define encoderPinA2 16
 #define encoderPinB1 4
 #define encoderPinB2 14
@@ -56,9 +55,9 @@ const int motorA_DIR = 0;
 const int motorA_PWM = 2;
 const int motorB_DIR = 15;
 const int motorB_PWM = 12;
-#define PPM_PIN 13 */
-// NodeMCU pin definitions for Encoders and Motors
-#define encoderPinA1 13
+#define PPM_PIN 13
+// ESP32 pin definitions for Encoders and Motors
+/* #define encoderPinA1 13
 #define encoderPinA2 12
 #define encoderPinB1 14
 #define encoderPinB2 27
@@ -67,9 +66,7 @@ const int motorA_PWM = 25;
 const int motorB_DIR = 33;
 const int motorB_PWM = 32;
 // Pin where the PPM signal is connected
-#define PPM_PIN 18
-// PWM signal frequency, preferably use something not in audible range
-#define PWM_FREQ 1000
+#define PPM_PIN 18 */
 #endif
 
 // Counts per revolution for the encoders
@@ -91,18 +88,7 @@ volatile long countB = 0; // Encoder count for Motor B
 // Timing variables for running PID at a set interval (100 times per second)
 unsigned long lastUpdateTime = 0;
 const uint16_t interval = 1000; // Time interval in microseconds (1000ms/100 = 10ms)
-#ifdef ENABLE_PPM
-// Timing variables for running ppm tuning at a set interval (5 times per second)
-unsigned long lastUpdateTimePPM = 0;
-const int intervalPPM = 200000; // Time interval in microseconds (1000ms/5 = 200ms)
 
-// PPM print mode
-bool ppmPrint = 0;     // Print PPM signal to serial monitor when true
-bool ppminterrupt = 0; // Turns on or off ppm interrupt
-
-// ppm-pid tuner on/off
-bool ppmTuner = 0; // Turns on or off ppm tuner
-#endif
 
 // PID Controller Mode
 bool mode; // Mode for PID controller mode 0 for angle PID and 1 for speed PID
@@ -169,55 +155,7 @@ QuickPID motorSpeedPIDB(&speed2, &output2, &targetSpeed1, KpB2, KiB2, KdB1, /* O
                         motorSpeedPIDB.iAwMode::iAwCondition,
                         motorSpeedPIDB.Action::direct);
 
-/////////////////////////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////PPM Reading//////////////////////////////////////////////////////////
-#ifdef ENABLE_PPM
-#define SYNC_GAP 3000 // Adjust as per sync gap width in microseconds
-#define NUM_CHANNELS 8
-#define READ_INTERVAL 50000 // 100 ms in microseconds
 
-volatile unsigned long lastPulseTime = 0;
-volatile unsigned long lastReadTime = 0; // Time when last data was read
-volatile int currentChannel = 0;
-volatile bool readyToRead = false;
-
-unsigned long ppmChannels[NUM_CHANNELS];
-
-// ISR to handle PPM signal
-IRAM_ATTR void ppmISR()
-{
-  unsigned long currentTime = micros();
-  unsigned long pulseWidth = currentTime - lastPulseTime;
-  lastPulseTime = currentTime;
-
-  // Check if 100ms has passed since the last data read
-  if ((currentTime - lastReadTime) < READ_INTERVAL)
-  {
-    return; // Exit if 100ms hasn't passed
-  }
-
-  // Check if the pulse width indicates a sync pulse
-  if (pulseWidth >= SYNC_GAP)
-  {
-    // Sync pulse detected, reset to the first channel
-    currentChannel = 0;
-    readyToRead = true;
-  }
-  else if (readyToRead && currentChannel < NUM_CHANNELS)
-  {
-    // Store the pulse width if within the allowed channel range
-    ppmChannels[currentChannel] = pulseWidth;
-    currentChannel++;
-
-    // If all channels have been read, mark the time and stop reading
-    if (currentChannel >= NUM_CHANNELS)
-    {
-      lastReadTime = currentTime;
-      readyToRead = false; // Wait for the next sync pulse
-    }
-  }
-}
-#endif
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 // Function declarations
@@ -230,9 +168,6 @@ IRAM_ATTR void manageCountA(); // ISR for Encoder A
 IRAM_ATTR void manageCountB(); // ISR for Encoder B
 #endif
 
-#ifdef ENABLE_PPM
-void ppm_pid_tuner(); // Function to control PID tuners using RF remote
-#endif
 
 void PrintPIDValues(); // Function to print PID input, target, output values to Serial Monitor for tuning
 
@@ -544,8 +479,7 @@ void setup()
   // Initialize serial communication
   Serial.begin(115200);
 
-// Set PWM frequency
-// analogWriteFreq(PWM_FREQ);
+
 
 // Set up the PPM input pin
 #ifdef ENABLE_PPM
@@ -568,9 +502,7 @@ void setup()
   motorSpeedPIDB.SetMode(motorSpeedPIDB.Control::manual); // Set PID mode to manual
 }
 void runPIDControl();
-#ifdef ENABLE_PPM
-void printPPMChannels();
-#endif
+
 void processSerialInput();
 
 void loop()
@@ -652,19 +584,7 @@ void runPIDControl()
     motorB.controlMotor(output2);
   }
 }
-#ifdef ENABLE_PPM
-// Function to print PPM channels
-void printPPMChannels()
-{
-  Serial.print("Channels: ");
-  for (int i = 0; i < NUM_CHANNELS; i++)
-  {
-    Serial.print(ppmChannels[i]);
-    Serial.print("\t");
-  }
-  Serial.println();
-}
-#endif
+
 // Function to process serial input and commands
 void processSerialInput()
 {
@@ -811,110 +731,3 @@ void PrintPIDValues()
     Serial.println("Invalid argument");
   }
 }
-#ifdef ENABLE_PPM
-void setPIDTunings(float val, float &Kp, float &Ki, float &Kd, QuickPID &pid, uint8_t control2)
-{
-  bool updated = false;
-
-  if (control2 == 0 && Kp != val)
-  {
-    Kp = val;
-    updated = true;
-  }
-  else if (control2 == 1 && Ki != val)
-  {
-    Ki = val;
-    updated = true;
-  }
-  else if (control2 == 2 && Kd != val)
-  {
-    Kd = val;
-    updated = true;
-  }
-
-  if (updated)
-  {
-    pid.SetTunings(Kp, Ki, Kd); // Only update PID tunings if any value changes
-  }
-}
-
-
-void ppm_pid_tuner()
-{
-  // Determine control1 based on ppmChannels[4]
-  uint8_t control1 = 0;
-  if (ppmChannels[4] >= 1150)
-  {
-    if (ppmChannels[4] < 1310)
-      control1 = 1;
-    else if (ppmChannels[4] < 1480)
-      control1 = 2;
-    else if (ppmChannels[4] < 1650)
-      control1 = 3;
-    else if (ppmChannels[4] < 1820)
-      control1 = 4;
-    else
-      control1 = 5;
-  }
-
-  // Determine control2 based on ppmChannels[5]
-  uint8_t control2 = (ppmChannels[5] < 1300) ? 0 : ((ppmChannels[5] < 1600) ? 1 : 2);
-
-  uint8_t multiplier = (ppmChannels[7] < 1500) ? 1 : 2;
-
-  float val = (ppmChannels[2] - 1000) * 0.001 * multiplier; // Scale 'val' between 0 and 1
-
-  switch (control1)
-  {
-  case 0:
-    setPIDTunings(val, KpA1, KiA1, KdA1, motorAnglePIDA, control2);
-    // if (ppmChannels[6] > 1500)
-    // {
-    //   targetAngle1 = ppmChannels[3] - 1000;
-    // }
-    break;
-  case 1:
-    setPIDTunings(val, KpA2, KiA2, KdA2, motorAnglePIDB, control2);
-    // if (ppmChannels[6] > 1500)
-    // {
-    //   targetAngle2 = ppmChannels[3] - 1000;
-    // }
-    break;
-  case 2:
-    setPIDTunings(val, KpB1, KiB1, KdB1, motorSpeedPIDA, control2);
-    // if (ppmChannels[6] > 1500)
-    // {
-    //   targetSpeed1 = ppmChannels[3] - 1000;
-    // }
-    break;
-  case 3:
-    setPIDTunings(val, KpB2, KiB2, KdB2, motorSpeedPIDB, control2);
-    // if (ppmChannels[6] > 1500)
-    // {
-    //   targetSpeed2 = ppmChannels[3] - 1000;
-    // }
-    break;
-  case 4:
-    // Disable all PID controllers
-    motorAnglePIDA.SetMode(0);
-    motorAnglePIDB.SetMode(0);
-    motorSpeedPIDA.SetMode(0);
-    motorSpeedPIDB.SetMode(0);
-
-    // Set direct outputs based on control2
-    if (control2 == 0)
-    {
-      motorA.controlMotor((int)(val * 255));
-      // Serial.println(output1);
-    }
-    else if (control2 == 1)
-    {
-      motorB.controlMotor((int)(val * 255));
-      // Serial.println(output2);
-    }
-    break;
-  default:
-    break;
-  }
-}
-#endif
