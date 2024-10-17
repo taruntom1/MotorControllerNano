@@ -199,18 +199,42 @@ void resetCommand()
 // Helper function to parse and set PID values
 void updatePID(float &Kp, float &Ki, float &Kd, char *input)
 {
-  float pid_args[3] = {0.0f}; // Holds parsed PID values
-  char *str;
-  int i = 0;
+    float pid_args[3] = {Kp, Ki, Kd};  // Initialize with current values
+    char *str;
+    int i = 0;
 
-  while ((str = strtok_r(input, ":", &input)) != NULL && i < 3)
-  {
-    // pid_args[i++] = strtof(str, NULL); // Use strtof to convert to float
-  }
+    // Check if the input contains ':', which indicates no prefixes (all values update at once)
+    if (strchr(input, ':') != NULL)
+    {
+        // Update all PID values at once
+        while ((str = strtok_r(input, ":", &input)) != NULL && i < 3)
+        {
+            pid_args[i++] = strtof(str, NULL); // Convert each token to float
+        }
 
-  Kp = pid_args[0];
-  Ki = pid_args[1];
-  Kd = pid_args[2];
+        Kp = pid_args[0];
+        Ki = pid_args[1];
+        Kd = pid_args[2];
+    }
+    else
+    {
+        // Update individual PID values with 'p-', 'i-', 'd-' prefixes
+        while ((str = strtok_r(input, ":", &input)) != NULL)
+        {
+            if (str[0] == 'p' || str[0] == 'P')  // Update Kp
+            {
+                Kp = strtof(str + 2, NULL); // Skip the 'p-' or 'P-'
+            }
+            else if (str[0] == 'i' || str[0] == 'I') // Update Ki
+            {
+                Ki = strtof(str + 2, NULL); // Skip the 'i-' or 'I-'
+            }
+            else if (str[0] == 'd' || str[0] == 'D') // Update Kd
+            {
+                Kd = strtof(str + 2, NULL); // Skip the 'd-' or 'D-'
+            }
+        }
+    }
 }
 
 // Function to run the appropriate command based on serial input
