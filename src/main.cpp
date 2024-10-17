@@ -1,14 +1,14 @@
 #include <Arduino.h>
 #include <QuickPID.h>
 #include "Motor.h"
-#include "PPMTuner.h"
+// #include "PPMTuner.h"
 
-//#define DEBUG
+// #define DEBUG
 // #define BENCHMARK
-#define ENABLE_PPM
+// #define ENABLE_PPM
 
-//#define ARDUINO_NANO
-#define nodeMCU
+#define ARDUINO_NANO
+// #define nodeMCU
 ///////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////Serial Control Commands////////////////////////////////////////////
 // Define command characters for various actions
@@ -89,7 +89,6 @@ volatile long countB = 0; // Encoder count for Motor B
 unsigned long lastUpdateTime = 0;
 const uint16_t interval = 1000; // Time interval in microseconds (1000ms/100 = 10ms)
 
-
 // PID Controller Mode
 bool mode; // Mode for PID controller mode 0 for angle PID and 1 for speed PID
 // PID enable
@@ -155,7 +154,6 @@ QuickPID motorSpeedPIDB(&speed2, &output2, &targetSpeed1, KpB2, KiB2, KdB1, /* O
                         motorSpeedPIDB.iAwMode::iAwCondition,
                         motorSpeedPIDB.Action::direct);
 
-
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 // Function declarations
@@ -168,7 +166,6 @@ IRAM_ATTR void manageCountA(); // ISR for Encoder A
 IRAM_ATTR void manageCountB(); // ISR for Encoder B
 #endif
 
-
 void PrintPIDValues(); // Function to print PID input, target, output values to Serial Monitor for tuning
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -177,7 +174,6 @@ void PrintPIDValues(); // Function to print PID input, target, output values to 
 // Variables to handle serial command parsing
 int arg = 0;
 int index1 = 0;
-char chr;       // Holds the input character
 char cmd;       // Holds the current command
 char argv1[16]; // Holds the first argument as a string
 char argv2[16]; // Holds the second argument as a string
@@ -199,49 +195,49 @@ void resetCommand()
 // Helper function to parse and set PID values
 void updatePID(float &Kp, float &Ki, float &Kd, char *input)
 {
-    float pid_args[3] = {Kp, Ki, Kd};  // Initialize with current values
-    char *str;
-    int i = 0;
+  float pid_args[3] = {Kp, Ki, Kd}; // Initialize with current values
+  char *str;
+  int i = 0;
 
-    // Check if the input contains ':', which indicates no prefixes (all values update at once)
-    if (strchr(input, ':') != NULL)
+  // Check if the input contains ':', which indicates no prefixes (all values update at once)
+  if (strchr(input, ':') != NULL)
+  {
+    // Update all PID values at once
+    while ((str = strtok_r(input, ":", &input)) != NULL && i < 3)
     {
-        // Update all PID values at once
-        while ((str = strtok_r(input, ":", &input)) != NULL && i < 3)
-        {
-            pid_args[i++] = strtof(str, NULL); // Convert each token to float
-        }
+      pid_args[i++] = atof(str); // Convert each token to float
+    }
 
-        Kp = pid_args[0];
-        Ki = pid_args[1];
-        Kd = pid_args[2];
-    }
-    else
+    Kp = pid_args[0];
+    Ki = pid_args[1];
+    Kd = pid_args[2];
+  }
+  else
+  {
+    // Update individual PID values with 'p-', 'i-', 'd-' prefixes
+    while ((str = strtok_r(input, ":", &input)) != NULL)
     {
-        // Update individual PID values with 'p-', 'i-', 'd-' prefixes
-        while ((str = strtok_r(input, ":", &input)) != NULL)
-        {
-            if (str[0] == 'p' || str[0] == 'P')  // Update Kp
-            {
-                Kp = strtof(str + 2, NULL); // Skip the 'p-' or 'P-'
-            }
-            else if (str[0] == 'i' || str[0] == 'I') // Update Ki
-            {
-                Ki = strtof(str + 2, NULL); // Skip the 'i-' or 'I-'
-            }
-            else if (str[0] == 'd' || str[0] == 'D') // Update Kd
-            {
-                Kd = strtof(str + 2, NULL); // Skip the 'd-' or 'D-'
-            }
-        }
+      if (str[0] == 'p' || str[0] == 'P') // Update Kp
+      {
+        Kp = atof(str + 2); // Skip the 'p-' or 'P-'
+      }
+      else if (str[0] == 'i' || str[0] == 'I') // Update Ki
+      {
+        Ki = atof(str + 2); // Skip the 'i-' or 'I-'
+      }
+      else if (str[0] == 'd' || str[0] == 'D') // Update Kd
+      {
+        Kd = atof(str + 2); // Skip the 'd-' or 'D-'
+      }
     }
+  }
 }
 
 // Function to run the appropriate command based on serial input
 void runCommand()
 {
-  int arg1 = atoi(argv1); // Convert argv1 to integer
-  int arg2 = atoi(argv2); // Convert argv2 to integer
+  arg1 = atoi(argv1); // Convert argv1 to integer
+  arg2 = atoi(argv2); // Convert argv2 to integer
   char *p = argv1;        // Points to argv1
 
   switch (cmd)
@@ -503,8 +499,6 @@ void setup()
   // Initialize serial communication
   Serial.begin(115200);
 
-
-
 // Set up the PPM input pin
 #ifdef ENABLE_PPM
   pinMode(PPM_PIN, INPUT);
@@ -540,9 +534,9 @@ void loop()
   // Handle PID updates at regular intervals
   if (currentTime - lastUpdateTime >= interval)
   {
-    #ifdef DEBUG
+#ifdef DEBUG
     Serial.println("Inside PID loop");
-    #endif
+#endif
     lastUpdateTime = currentTime;
 
     // Handle PID control (either angle or speed mode)
@@ -596,7 +590,7 @@ void runPIDControl()
     motorA.controlMotor(output1);
     motorB.controlMotor(output2);
   }
-  else if (mode == 1) // Speed PID mode
+  else // Speed PID mode
   {
     speed1 = motorA.calculateRPM(); // Calculate RPM for Motor A
     motorSpeedPIDA.Compute();

@@ -1,5 +1,6 @@
 #include "PPMTuner.h"
-
+//#define ENABLE_PPM
+#ifdef ENABLE_PPM
 // Global Variables
 unsigned long lastUpdateTimePPM = 0;
 const unsigned long intervalPPM = 200000;  // or unsigned long if the value is non-negative
@@ -145,3 +146,4 @@ void ppm_pid_tuner()
         break;
     }
 }
+#ifdef ENABLE_PPM

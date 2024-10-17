@@ -1,6 +1,7 @@
 #ifndef PPM_TUNER_H
 #define PPM_TUNER_H
-
+//#define ENABLE_PPM
+#ifdef ENABLE_PPM
 #include <Arduino.h>
 #include <QuickPID.h>
 #include "Motor.h"
@@ -40,6 +41,6 @@ void ppmISR();
 void printPPMChannels();
 void setPIDTunings(float val, float &Kp, float &Ki, float &Kd, QuickPID &pid, uint8_t control2);
 void ppm_pid_tuner();
-
+#endif
 #endif // PPM_TUNER_H
     
