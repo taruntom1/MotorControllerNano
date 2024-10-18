@@ -2,14 +2,14 @@
 
 // Constructor
 Motor::Motor(int directionPin, int pwmPin, volatile long &encCount, int countsPerRot, int pwmOff)
-  : dirPin(directionPin), pwmPin(pwmPin), encoderCount(encCount), countsPerRotation(countsPerRot), pwmOffset(pwmOff)
+    : dirPin(directionPin), pwmPin(pwmPin), encoderCount(encCount), countsPerRotation(countsPerRot), pwmOffset(pwmOff)
 {
   pinMode(dirPin, OUTPUT);
   pinMode(pwmPin, OUTPUT);
-  prevTime = millis();  // Initialize previous time
-  prevCount = encoderCount;  // Initialize previous encoder count
+  prevTime = millis();      // Initialize previous time
+  prevCount = encoderCount; // Initialize previous encoder count
+  alpha = 0.01;
 }
-
 // Function to control Motor speed and direction
 void Motor::controlMotor(double speed)
 {
@@ -33,6 +33,10 @@ void Motor::controlMotor(double speed)
   }
 }
 
+void Motor::updateAlpha(float newAlpha)
+{
+  alpha = newAlpha;
+}
 // Function to calculate the angle of rotation for the motor
 double Motor::calculateAngle()
 {
@@ -57,13 +61,11 @@ int Motor::calculateRPM()
     return filteredRPM; // Return the previously filtered RPM value
   }
 
-  // Avoid floating-point math by working with integer math
-  // Calculate RPM directly using integer math: (countDiff * 60000) / (countsPerRevolution * timeDiffMillis)
   long rpm = (countDiff * 60000L) / (countsPerRotation * timeDiffMillis);
 
   // Apply low-pass filter using exponential moving average
   // alpha is the smoothing factor (0 < alpha < 1), here we use 0.1 as an example
-  float alpha = 0.1;
+
   filteredRPM = (alpha * rpm) + ((1 - alpha) * filteredRPM);
 
   // Update previous time and encoder count for next calculation
@@ -72,4 +74,3 @@ int Motor::calculateRPM()
 
   return filteredRPM;
 }
-

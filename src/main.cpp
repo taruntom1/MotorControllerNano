@@ -29,6 +29,7 @@
 #define PPM_INTRRUPT 'i'        // enable/disable ppm interrupt
 #define PPM_TUNE 't'            // For enabling tuning with ppm (RC transmitter and receiver))
 #define PRINT_PID_CONST 'k'     // for printing pid constants
+#define UPDATE_ALPHA 'j'
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 // Pin definitions
@@ -43,7 +44,7 @@ const int motorA_DIR = 7;
 const int motorA_PWM = 6;
 const int motorB_DIR = 8;
 const int motorB_PWM = 9;
-#define PPM_PIN 18
+//#define PPM_PIN 18
 #endif
 
 #ifdef nodeMCU
@@ -87,7 +88,7 @@ volatile long countB = 0; // Encoder count for Motor B
 
 // Timing variables for running PID at a set interval (100 times per second)
 unsigned long lastUpdateTime = 0;
-const uint16_t interval = 1000; // Time interval in microseconds (1000ms/100 = 10ms)
+const uint16_t interval = 30000; // Time interval in microseconds (1000ms/100 = 10ms)
 
 // PID Controller Mode
 bool mode; // Mode for PID controller mode 0 for angle PID and 1 for speed PID
@@ -197,11 +198,12 @@ void updatePID(float &Kp, float &Ki, float &Kd, char *input)
 {
   float pid_args[3] = {Kp, Ki, Kd}; // Initialize with current values
   char *str;
-  int i = 0;
+  
 
   // Check if the input contains ':', which indicates no prefixes (all values update at once)
   if (strchr(input, ':') != NULL)
   {
+    int i = 0;
     // Update all PID values at once
     while ((str = strtok_r(input, ":", &input)) != NULL && i < 3)
     {
@@ -451,7 +453,10 @@ void runCommand()
     Serial.print("\tkd: ");
     Serial.println(motorSpeedPIDB.GetKd());
     break;
-
+  case UPDATE_ALPHA:
+    motorA.updateAlpha(atof(argv1));
+    motorB.updateAlpha(atof(argv1));
+    break;
   default:
     Serial.println("Invalid command");
     break;

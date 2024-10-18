@@ -15,6 +15,7 @@ class Motor
     const int countsPerRotation; // Encoder counts per full rotation
     const unsigned long millisToMinutes = 60000; // Milliseconds to minutes for RPM calculation
     int filteredRPM;             // Filtered RPM value
+    float alpha;
 
   public:
     // Constructor
@@ -28,6 +29,9 @@ class Motor
 
     // Function to calculate RPM with running average of the last 5 values
     int calculateRPM();
+
+    //Function to adjust the low pass filter value
+    void updateAlpha(float newAlpha);
 };
 
 #endif
