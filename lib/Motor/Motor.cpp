@@ -9,6 +9,7 @@ Motor::Motor(int directionPin, int pwmPin, volatile long &encCount, int countsPe
   prevTime = millis();      // Initialize previous time
   prevCount = encoderCount; // Initialize previous encoder count
   alpha = 0.01;
+  rpmConstant = 60000000.0 / countsPerRotation; // RPM constant
 }
 // Function to control Motor speed and direction
 void Motor::controlMotor(double speed)
@@ -47,30 +48,27 @@ double Motor::calculateAngle()
 // Function to calculate RPM with running average of the last 5 values
 int Motor::calculateRPM()
 {
-  unsigned long currentTime = millis(); // Get current time in milliseconds
+  long currentTime = micros(); // Get current time in milliseconds
 
   // Calculate time difference in milliseconds
-  unsigned long timeDiffMillis = currentTime - prevTime;
+  long timeDiffMillis = currentTime - prevTime;
 
   // Calculate the change in encoder count
   long countDiff = encoderCount - prevCount;
 
-  // Avoid division by zero by returning the previous filtered RPM value
+  // Avoid division by zero
   if (timeDiffMillis == 0)
   {
-    return filteredRPM; // Return the previously filtered RPM value
+    return filteredRPM; // Return 0 RPM if no time has passed
   }
 
-  long rpm = (countDiff * 60000L) / (countsPerRotation * timeDiffMillis);
-
-  // Apply low-pass filter using exponential moving average
-  // alpha is the smoothing factor (0 < alpha < 1), here we use 0.1 as an example
+  // Calculate RPM
+  float rpm = ((countDiff * rpmConstant) / timeDiffMillis);
 
   filteredRPM = (alpha * rpm) + ((1 - alpha) * filteredRPM);
 
-  // Update previous time and encoder count for next calculation
+  // Update previous time and encoder count for the next calculation
   prevTime = currentTime;
   prevCount = encoderCount;
-
   return filteredRPM;
 }

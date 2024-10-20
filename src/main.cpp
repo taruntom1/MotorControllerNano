@@ -44,11 +44,11 @@ const int motorA_DIR = 7;
 const int motorA_PWM = 6;
 const int motorB_DIR = 8;
 const int motorB_PWM = 9;
-//#define PPM_PIN 18
+// #define PPM_PIN 18
 #endif
 
 #ifdef nodeMCU
-#define encoderPinA1 5
+/* #define encoderPinA1 5
 #define encoderPinA2 16
 #define encoderPinB1 4
 #define encoderPinB2 14
@@ -56,18 +56,18 @@ const int motorA_DIR = 0;
 const int motorA_PWM = 2;
 const int motorB_DIR = 15;
 const int motorB_PWM = 12;
-#define PPM_PIN 13
+#define PPM_PIN 13 */
 // ESP32 pin definitions for Encoders and Motors
-/* #define encoderPinA1 13
-#define encoderPinA2 12
-#define encoderPinB1 14
-#define encoderPinB2 27
-const int motorA_DIR = 26;
-const int motorA_PWM = 25;
-const int motorB_DIR = 33;
-const int motorB_PWM = 32;
+#define encoderPinA1 5
+#define encoderPinA2 6
+#define encoderPinB1 7
+#define encoderPinB2 8
+const int motorA_DIR = 9;
+const int motorA_PWM = 10;
+const int motorB_DIR = 11;
+const int motorB_PWM = 12;
 // Pin where the PPM signal is connected
-#define PPM_PIN 18 */
+// #define PPM_PIN 14
 #endif
 
 // Counts per revolution for the encoders
@@ -198,7 +198,6 @@ void updatePID(float &Kp, float &Ki, float &Kd, char *input)
 {
   float pid_args[3] = {Kp, Ki, Kd}; // Initialize with current values
   char *str;
-  
 
   // Check if the input contains ':', which indicates no prefixes (all values update at once)
   if (strchr(input, ':') != NULL)
@@ -240,7 +239,7 @@ void runCommand()
 {
   arg1 = atoi(argv1); // Convert argv1 to integer
   arg2 = atoi(argv2); // Convert argv2 to integer
-  char *p = argv1;        // Points to argv1
+  char *p = argv1;    // Points to argv1
 
   switch (cmd)
   {
@@ -270,9 +269,9 @@ void runCommand()
     break;
 
   case READ_SPEEDS:
-    Serial.print(motorA.calculateRPM());
+    Serial.print(speed1);
     Serial.print(" ");
-    Serial.println(motorB.calculateRPM()); // Respond with RPM of both motors
+    Serial.println(speed2); // Respond with RPM of both motors
     break;
 
   case RESET_ENCODERS:
@@ -597,11 +596,8 @@ void runPIDControl()
   }
   else // Speed PID mode
   {
-    speed1 = motorA.calculateRPM(); // Calculate RPM for Motor A
-    motorSpeedPIDA.Compute();
-
-    speed2 = motorB.calculateRPM(); // Calculate RPM for Motor B
-    motorSpeedPIDB.Compute();
+    motorSpeedPIDA.Compute(); // Compute PID for Motor A
+    motorSpeedPIDB.Compute(); // Compute PID for Motor B
 
     motorA.controlMotor(output1);
     motorB.controlMotor(output2);
@@ -650,6 +646,9 @@ void processSerialInput()
 
 #ifdef ARDUINO_NANO
 
+uint8_t loop_counter1 = 0;
+uint8_t loop_counter2 = 0;
+
 // Interrupt service routine (ISR) for Encoder A
 void manageCountA()
 {
@@ -661,6 +660,12 @@ void manageCountA()
   else
   {
     countA++; // Reverse rotation
+  }
+  loop_counter1++;
+  if (loop_counter1 == 2)
+  {
+    loop_counter1 = 0;
+    speed1 = motorB.calculateRPM();
   }
 }
 
@@ -675,6 +680,12 @@ void manageCountB()
   else
   {
     countB++; // Reverse rotation
+  }
+  loop_counter2++;
+  if (loop_counter2 == 2)
+  {
+    loop_counter2 = 0;
+    speed2 = motorB.calculateRPM();
   }
 }
 #endif
@@ -694,7 +705,7 @@ IRAM_ATTR void manageCountA()
     countA++; // Reverse rotation
   }
 }
-
+uint8_t counter = 0;
 // Interrupt service routine (ISR) for Encoder B
 IRAM_ATTR void manageCountB()
 {
@@ -706,6 +717,12 @@ IRAM_ATTR void manageCountB()
   else
   {
     countB++; // Reverse rotation
+  }
+  counter++;
+  if (counter = 8)
+  {
+    counter = 0;
+    speed2 = motorB.calculateRPM();
   }
 }
 
@@ -736,7 +753,7 @@ void PrintPIDValues()
     break;
 
   case 3:
-    Serial.print(motorA.calculateRPM());
+    Serial.print(speed1);
     Serial.print(" ");
     Serial.print(targetSpeed1);
     Serial.print(" ");
@@ -744,7 +761,7 @@ void PrintPIDValues()
     break;
 
   case 4:
-    Serial.print(motorB.calculateRPM());
+    Serial.print(speed2);
     Serial.print(" ");
     Serial.print(targetSpeed2);
     Serial.print(" ");
