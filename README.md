@@ -1,4 +1,4 @@
-# Motor Controller with Arduino - Documentation
+# Motor Controller with Arduino
 
 ## Overview
 
