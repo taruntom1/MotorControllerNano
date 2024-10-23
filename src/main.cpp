@@ -42,7 +42,7 @@
 #define encoderPinB2 5
 const int motorA_DIR = 7;
 const int motorA_PWM = 6;
-const int motorB_DIR = 8;
+const int motorB_DIR = 10;
 const int motorB_PWM = 9;
 // #define PPM_PIN 18
 #endif
@@ -88,7 +88,7 @@ volatile long countB = 0; // Encoder count for Motor B
 
 // Timing variables for running PID at a set interval (100 times per second)
 unsigned long lastUpdateTime = 0;
-const uint16_t interval = 30000; // Time interval in microseconds (1000ms/100 = 10ms)
+const uint16_t interval = 10000; // Time interval in microseconds (1000ms/100 = 10ms)
 
 // PID Controller Mode
 bool mode; // Mode for PID controller mode 0 for angle PID and 1 for speed PID
@@ -114,9 +114,9 @@ float angle2 = 0;       // Angle of rotation for Motor B
 float targetAngle2 = 0; // Target angle for Motor B
 
 // PID constants for motor 1
-float KpA1 = 1.51, KiA1 = 0.1, KdA1 = 0.1;
+float KpA1 = 5, KiA1 = 0.0, KdA1 = 0.08;
 // PID constants for motor 2
-float KpA2 = 1.51, KiA2 = 0.1, KdA2 = 0.1;
+float KpA2 = 5, KiA2 = 0.0, KdA2 = 0.1;
 
 // PID Controller Object
 QuickPID motorAnglePIDA(&angle1, &output1, &targetAngle1, KpA1, KiA1, KdA1, /* OPTIONS */
@@ -124,7 +124,7 @@ QuickPID motorAnglePIDA(&angle1, &output1, &targetAngle1, KpA1, KiA1, KdA1, /* O
                         motorAnglePIDA.dMode::dOnError,
                         motorAnglePIDA.iAwMode::iAwCondition,
                         motorAnglePIDA.Action::direct);
-QuickPID motorAnglePIDB(&angle2, &output2, &targetAngle1, KpA2, KiA2, KdA1, /* OPTIONS */
+QuickPID motorAnglePIDB(&angle2, &output2, &targetAngle2, KpA2, KiA2, KdA1, /* OPTIONS */
                         motorAnglePIDB.pMode::pOnError,
                         motorAnglePIDB.dMode::dOnError,
                         motorAnglePIDB.iAwMode::iAwCondition,
@@ -140,16 +140,16 @@ float speed2 = 0;       // Speed of Motor B
 float targetSpeed2 = 0; // Target speed for Motor B
 
 // PID constants for motor 1
-float KpB1 = 1.0, KiB1 = 0.1, KdB1 = 0.0;
+float KpB1 = 5.0, KiB1 = 0.0, KdB1 = 0.0;
 // PID constants for motor 2
-float KpB2 = 1.0, KiB2 = 0.1, KdB2 = 0.0;
+float KpB2 = 5.0, KiB2 = 0.0, KdB2 = 0.0;
 
 QuickPID motorSpeedPIDA(&speed1, &output1, &targetSpeed1, KpB1, KiB1, KdB1, /* OPTIONS */
                         motorSpeedPIDA.pMode::pOnError,
                         motorSpeedPIDA.dMode::dOnError,
                         motorSpeedPIDA.iAwMode::iAwCondition,
                         motorSpeedPIDA.Action::direct);
-QuickPID motorSpeedPIDB(&speed2, &output2, &targetSpeed1, KpB2, KiB2, KdB1, /* OPTIONS */
+QuickPID motorSpeedPIDB(&speed2, &output2, &targetSpeed2, KpB2, KiB2, KdB1, /* OPTIONS */
                         motorSpeedPIDB.pMode::pOnError,
                         motorSpeedPIDB.dMode::dOnError,
                         motorSpeedPIDB.iAwMode::iAwCondition,
@@ -665,7 +665,7 @@ void manageCountA()
   if (loop_counter1 == 2)
   {
     loop_counter1 = 0;
-    speed1 = motorB.calculateRPM();
+    speed1 = motorA.calculateRPM();
   }
 }
 
