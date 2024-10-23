@@ -25,11 +25,11 @@
 #define UPDATE_PIDSA 'w'        // Update speed PID values for Motor A (Kp, Ki, Kd) eg: w 10:20:30
 #define UPDATE_PIDSB 'x'        // Update speed PID values for Motor B (Kp, Ki, Kd) eg: x 10:20:30
 #define GET_INP_TAR 'g'         // prints target and input values for specified pid eg: g 1 , g 0 for disabling the printing, 1 -angle motor 1, 2 - angle motor 2, 3 - speed motor 1, 4 - speed motor 2
-#define PRINT_PPM 'z'           // print PPM signal
-#define PPM_INTRRUPT 'i'        // enable/disable ppm interrupt
+#define PRINT_PPM 'z'           // continously prints PPM signal recieved from the transmitter
+#define PPM_INTRRUPT 'i'        // enable/disable ppm interrupt of the ppm
 #define PPM_TUNE 't'            // For enabling tuning with ppm (RC transmitter and receiver))
-#define PRINT_PID_CONST 'k'     // for printing pid constants
-#define UPDATE_ALPHA 'j'
+#define PRINT_PID_CONST 'k'     // for printing pid constants values
+#define UPDATE_ALPHA 'j'        // Update alpha value of low pass filter when calculating the motor speed from encoder eg: j 10
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
 // Pin definitions
