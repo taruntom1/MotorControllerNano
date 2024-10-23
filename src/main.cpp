@@ -87,8 +87,10 @@ volatile long countA = 0; // Encoder count for Motor A
 volatile long countB = 0; // Encoder count for Motor B
 
 // Timing variables for running PID at a set interval (100 times per second)
-unsigned long lastUpdateTime = 0;
-const uint16_t interval = 10000; // Time interval in microseconds (1000ms/100 = 10ms)
+unsigned long lastAngleUpdateTime = 0;
+unsigned long lastSpeedUpdateTime = 0;
+const uint16_t anglePIDinterval = 10000; // Time interval in microseconds (1000ms/100 = 10ms)
+const uint16_t speedPIDinterval = 30000; // Time interval in microseconds (1000ms/100 = 10ms)
 
 // PID Controller Mode
 bool mode; // Mode for PID controller mode 0 for angle PID and 1 for speed PID
@@ -508,14 +510,14 @@ void setup()
   pinMode(PPM_PIN, INPUT);
 #endif
   // Initial settings for PID
-  motorAnglePIDA.SetSampleTimeUs(interval);                                    // Set PID update interval
+  motorAnglePIDA.SetSampleTimeUs(anglePIDinterval);                            // Set PID update interval
   motorAnglePIDA.SetOutputLimits(-PWM_MAX + pwmOffsetA, PWM_MAX - pwmOffsetA); // Set output range
-  motorAnglePIDB.SetSampleTimeUs(interval);                                    // Set PID update interval
+  motorAnglePIDB.SetSampleTimeUs(anglePIDinterval);                            // Set PID update interval
   motorAnglePIDB.SetOutputLimits(-PWM_MAX + pwmOffsetB, PWM_MAX - pwmOffsetB); // Set output range
 
-  motorSpeedPIDA.SetSampleTimeUs(interval);                                    // Set PID update interval
+  motorSpeedPIDA.SetSampleTimeUs(speedPIDinterval);                            // Set PID update interval
   motorSpeedPIDA.SetOutputLimits(-PWM_MAX + pwmOffsetA, PWM_MAX - pwmOffsetA); // Set output range
-  motorSpeedPIDB.SetSampleTimeUs(interval);                                    // Set PID update interval
+  motorSpeedPIDB.SetSampleTimeUs(speedPIDinterval);                            // Set PID update interval
   motorSpeedPIDB.SetOutputLimits(-PWM_MAX + pwmOffsetB, PWM_MAX - pwmOffsetB); // Set output range
 
   motorAnglePIDA.SetMode(motorAnglePIDA.Control::manual); // Set PID mode to automatic
@@ -523,7 +525,8 @@ void setup()
   motorSpeedPIDA.SetMode(motorSpeedPIDA.Control::manual); // Set PID mode to manual
   motorSpeedPIDB.SetMode(motorSpeedPIDB.Control::manual); // Set PID mode to manual
 }
-void runPIDControl();
+void runAnglePIDControl();
+void runSpeedPIDControl();
 
 void processSerialInput();
 
@@ -536,17 +539,46 @@ void loop()
   unsigned long currentTime = micros(); // Store current time once
 
   // Handle PID updates at regular intervals
-  if (currentTime - lastUpdateTime >= interval)
+  if (currentTime - lastAngleUpdateTime >= anglePIDinterval)
   {
 #ifdef DEBUG
     Serial.println("Inside PID loop");
 #endif
-    lastUpdateTime = currentTime;
+    lastAngleUpdateTime = currentTime;
 
     // Handle PID control (either angle or speed mode)
     if (pidEnable)
     {
-      runPIDControl();
+      runAnglePIDControl();
+    }
+
+    // Optionally print PID values for tuning
+    if (modePrint != 0)
+    {
+      PrintPIDValues();
+    }
+
+// Handle PPM channel printing if enabled
+#ifdef ENABLE_PPM
+    if (ppmPrint)
+    {
+      printPPMChannels();
+    }
+#endif
+  }
+
+
+  if (currentTime - lastSpeedUpdateTime >= anglePIDinterval)
+  {
+#ifdef DEBUG
+    Serial.println("Inside PID loop");
+#endif
+    lastSpeedUpdateTime = currentTime;
+
+    // Handle PID control (either angle or speed mode)
+    if (pidEnable)
+    {
+      runSpeedPIDControl();
     }
 
     // Optionally print PID values for tuning
@@ -581,27 +613,24 @@ void loop()
 }
 
 // Function to run the appropriate PID control based on mode
-void runPIDControl()
+void runAnglePIDControl()
 {
-  if (mode == 0) // Angle PID mode
-  {
-    angle1 = motorA.calculateAngle(); // Calculate angle for Motor A
-    motorAnglePIDA.Compute();
+  angle1 = motorA.calculateAngle(); // Calculate angle for Motor A
+  motorAnglePIDA.Compute();
 
-    angle2 = motorB.calculateAngle(); // Calculate angle for Motor B
-    motorAnglePIDB.Compute();
+  angle2 = motorB.calculateAngle(); // Calculate angle for Motor B
+  motorAnglePIDB.Compute();
 
-    motorA.controlMotor(output1);
-    motorB.controlMotor(output2);
-  }
-  else // Speed PID mode
-  {
-    motorSpeedPIDA.Compute(); // Compute PID for Motor A
-    motorSpeedPIDB.Compute(); // Compute PID for Motor B
+  motorA.controlMotor(output1);
+  motorB.controlMotor(output2);
+}
+void runSpeedPIDControl()
+{
+  motorSpeedPIDA.Compute(); // Compute PID for Motor A
+  motorSpeedPIDB.Compute(); // Compute PID for Motor B
 
-    motorA.controlMotor(output1);
-    motorB.controlMotor(output2);
-  }
+  motorA.controlMotor(output1);
+  motorB.controlMotor(output2);
 }
 
 // Function to process serial input and commands
