@@ -1,10 +1,11 @@
 #include <Arduino.h>
 #include <QuickPID.h>
 #include "Motor.h"
+#include <TimerOne.h>
 // #include "PPMTuner.h"
 
 // #define DEBUG
-// #define BENCHMARK
+#define BENCHMARK
 // #define ENABLE_PPM
 
 #define ARDUINO_NANO
@@ -43,7 +44,7 @@
 const int motorA_DIR = 7;
 const int motorA_PWM = 6;
 const int motorB_DIR = 10;
-const int motorB_PWM = 9;
+const int motorB_PWM = 11;
 // #define PPM_PIN 18
 #endif
 
@@ -291,6 +292,14 @@ void runCommand()
     mode = 1;
     targetSpeed1 = arg1;
     targetSpeed2 = arg2;
+    if (arg1 > 0)
+    {
+      motorSpeedPIDB.SetOutputLimits(pwmOffsetB, PWM_MAX - pwmOffsetB);
+    }
+    else
+    {
+      motorSpeedPIDB.SetOutputLimits(-PWM_MAX + pwmOffsetB, -pwmOffsetB);
+    }
 #ifdef DEBUG
     Serial.print("Speed 1: ");
     Serial.println(arg1);
@@ -494,7 +503,7 @@ void benchmarkLoopFrequency()
 }
 
 #endif
-
+void runPID();
 // Setup function to initialize motors, encoders, and serial communication
 void setup()
 {
@@ -504,6 +513,10 @@ void setup()
 
   // Initialize serial communication
   Serial.begin(115200);
+
+  // Hardware timer for calling PID at certain intervals
+  Timer1.initialize(anglePIDinterval);
+  Timer1.attachInterrupt(runPID);
 
 // Set up the PPM input pin
 #ifdef ENABLE_PPM
@@ -525,8 +538,6 @@ void setup()
   motorSpeedPIDA.SetMode(motorSpeedPIDA.Control::manual); // Set PID mode to manual
   motorSpeedPIDB.SetMode(motorSpeedPIDB.Control::manual); // Set PID mode to manual
 }
-void runAnglePIDControl();
-void runSpeedPIDControl();
 
 void processSerialInput();
 
@@ -535,66 +546,6 @@ void loop()
 #ifdef BENCHMARK
   benchmarkLoopFrequency(); // Benchmarks loop frequency if enabled
 #endif
-
-  unsigned long currentTime = micros(); // Store current time once
-
-  // Handle PID updates at regular intervals
-  if (!mode && (currentTime - lastAngleUpdateTime >= anglePIDinterval))
-  {
-#ifdef DEBUG
-    Serial.println("Inside PID loop");
-#endif
-    lastAngleUpdateTime = currentTime;
-
-    // Handle PID control (either angle or speed mode)
-    if (pidEnable)
-    {
-      runAnglePIDControl();
-    }
-
-    // Optionally print PID values for tuning
-    if (modePrint != 0)
-    {
-      PrintPIDValues();
-    }
-
-// Handle PPM channel printing if enabled
-#ifdef ENABLE_PPM
-    if (ppmPrint)
-    {
-      printPPMChannels();
-    }
-#endif
-  }
-
-
-  if (mode && (currentTime - lastSpeedUpdateTime >= speedPIDinterval))
-  {
-#ifdef DEBUG
-    Serial.println("Inside PID loop");
-#endif
-    lastSpeedUpdateTime = currentTime;
-
-    // Handle PID control (either angle or speed mode)
-    if (pidEnable)
-    {
-      runSpeedPIDControl();
-    }
-
-    // Optionally print PID values for tuning
-    if (modePrint != 0)
-    {
-      PrintPIDValues();
-    }
-
-// Handle PPM channel printing if enabled
-#ifdef ENABLE_PPM
-    if (ppmPrint)
-    {
-      printPPMChannels();
-    }
-#endif
-  }
 
 // Handle PPM tuner at regular intervals
 #ifdef ENABLE_PPM
@@ -611,27 +562,48 @@ void loop()
   if (Serial.available() > 0)
     processSerialInput();
 }
+uint8_t pidLoopCounter = 0;
+void runPID()
+{
+  if (pidEnable)
+  {
+    if (!mode)
+    {
+      angle1 = motorA.calculateAngle(); // Calculate angle for Motor A
+      motorAnglePIDA.Compute();
 
+      angle2 = motorB.calculateAngle(); // Calculate angle for Motor B
+      motorAnglePIDB.Compute();
+
+      motorA.controlMotor(output1);
+      motorB.controlMotor(output2);
+
+      if (modePrint != 0)
+      {
+        PrintPIDValues();
+      }
+    }
+    else if (pidLoopCounter == 4)
+    {
+      speed1 = motorA.calculateRPM(); // Calculate speed for Motor A
+      speed2 = motorB.calculateRPM(); // Calculate speed for Motor B
+      motorSpeedPIDA.Compute();       // Compute PID for Motor A
+      motorSpeedPIDB.Compute();       // Compute PID for Motor B
+
+      motorA.controlMotor(output1);
+      motorB.controlMotor(output2);
+      
+      
+      pidLoopCounter = 0;
+      if (modePrint != 0)
+      {
+        PrintPIDValues();
+      }
+    }
+  }
+  pidLoopCounter++;
+}
 // Function to run the appropriate PID control based on mode
-void runAnglePIDControl()
-{
-  angle1 = motorA.calculateAngle(); // Calculate angle for Motor A
-  motorAnglePIDA.Compute();
-
-  angle2 = motorB.calculateAngle(); // Calculate angle for Motor B
-  motorAnglePIDB.Compute();
-
-  motorA.controlMotor(output1);
-  motorB.controlMotor(output2);
-}
-void runSpeedPIDControl()
-{
-  motorSpeedPIDA.Compute(); // Compute PID for Motor A
-  motorSpeedPIDB.Compute(); // Compute PID for Motor B
-
-  motorA.controlMotor(output1);
-  motorB.controlMotor(output2);
-}
 
 // Function to process serial input and commands
 void processSerialInput()
@@ -675,9 +647,6 @@ void processSerialInput()
 
 #ifdef ARDUINO_NANO
 
-uint8_t loop_counter1 = 0;
-uint8_t loop_counter2 = 0;
-
 // Interrupt service routine (ISR) for Encoder A
 void manageCountA()
 {
@@ -689,12 +658,6 @@ void manageCountA()
   else
   {
     countA++; // Reverse rotation
-  }
-  loop_counter1++;
-  if (loop_counter1 == 4)
-  {
-    loop_counter1 = 0;
-    speed1 = motorA.calculateRPM();
   }
 }
 
@@ -709,12 +672,6 @@ void manageCountB()
   else
   {
     countB++; // Reverse rotation
-  }
-  loop_counter2++;
-  if (loop_counter2 == 4)
-  {
-    loop_counter2 = 0;
-    speed2 = motorB.calculateRPM();
   }
 }
 #endif
