@@ -8,7 +8,7 @@ Motor::Motor(int directionPin, int pwmPin, volatile long &encCount, int countsPe
   pinMode(pwmPin, OUTPUT);
   prevTime = millis();      // Initialize previous time
   prevCount = encoderCount; // Initialize previous encoder count
-  alpha = 0.01;
+  alpha = 0.1;
   rpmConstant = 60000000.0 / countsPerRotation; // RPM constant
 }
 // Function to control Motor speed and direction

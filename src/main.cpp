@@ -539,7 +539,7 @@ void loop()
   unsigned long currentTime = micros(); // Store current time once
 
   // Handle PID updates at regular intervals
-  if (currentTime - lastAngleUpdateTime >= anglePIDinterval)
+  if (!mode && (currentTime - lastAngleUpdateTime >= anglePIDinterval))
   {
 #ifdef DEBUG
     Serial.println("Inside PID loop");
@@ -568,7 +568,7 @@ void loop()
   }
 
 
-  if (currentTime - lastSpeedUpdateTime >= anglePIDinterval)
+  if (mode && (currentTime - lastSpeedUpdateTime >= speedPIDinterval))
   {
 #ifdef DEBUG
     Serial.println("Inside PID loop");
@@ -691,7 +691,7 @@ void manageCountA()
     countA++; // Reverse rotation
   }
   loop_counter1++;
-  if (loop_counter1 == 2)
+  if (loop_counter1 == 4)
   {
     loop_counter1 = 0;
     speed1 = motorA.calculateRPM();
@@ -711,7 +711,7 @@ void manageCountB()
     countB++; // Reverse rotation
   }
   loop_counter2++;
-  if (loop_counter2 == 2)
+  if (loop_counter2 == 4)
   {
     loop_counter2 = 0;
     speed2 = motorB.calculateRPM();
